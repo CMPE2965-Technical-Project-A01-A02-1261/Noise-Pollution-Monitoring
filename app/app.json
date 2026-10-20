@@ -19,7 +19,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.NoiseSensorMonitoring"
+      "package": "com.anonymous.NoiseSensorMonitoring",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     },
     "web": {
       "output": "static",
@@ -34,11 +39,24 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBleRequired": true,
+          "bluetoothAlwaysPermission": "Allow app to connect to bluetooth devices"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "877d22f5-d092-445e-bc10-73402d67085b"
+      }
     }
   }
 }
