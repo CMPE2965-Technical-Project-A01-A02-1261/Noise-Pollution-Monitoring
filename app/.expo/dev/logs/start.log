@@ -162,3 +162,125 @@
 {"_e":"metro:config","_t":1792431913093,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
 {"_e":"expo:dev-tools-plugin:load","_t":1792431913290,"plugins":[]}
 {"_e":"metro:instantiate","_t":1792431914583,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"root:init","_t":1792603746521,"format":"v0-jsonl","version":"57.0.29"}
+{"_e":"env:mode","_t":1792603746522,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1792603746523,"mode":"development","files":[],"env":{}}
+{"_e":"devserver:start","_t":1792603746787,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../src/app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1792603746976,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1792603747076,"plugins":[]}
+{"_e":"metro:instantiate","_t":1792603747340,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1792603760609,"id":"1","platform":"ios","environment":null,"entry":"node_modules/expo-router/entry.js"}
+{"_e":"metro:bundling:progress","_t":1792603760610,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792603760613,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792603761083,"id":"1","progress":0.010000000000000002,"total":1,"current":1}
+{"_e":"metro:bundling:progress","_t":1792603761184,"id":"1","progress":0.1111111111111111,"total":12,"current":4}
+{"_e":"metro:bundling:progress","_t":1792603761286,"id":"1","progress":0.1111111111111111,"total":23,"current":7}
+{"_e":"metro:bundling:progress","_t":1792603761439,"id":"1","progress":0.11982248520710058,"total":26,"current":9}
+{"_e":"metro:bundling:progress","_t":1792603761540,"id":"1","progress":0.11982248520710058,"total":30,"current":9}
+{"_e":"metro:bundling:progress","_t":1792603761595,"id":"1","progress":0.11982248520710058,"total":30,"current":10}
+{"_e":"metro:bundling:progress","_t":1792603761694,"id":"1","progress":0.20897959183673467,"total":35,"current":16}
+{"_e":"metro:bundling:progress","_t":1792603761796,"id":"1","progress":0.20897959183673467,"total":140,"current":23}
+{"_e":"metro:bundling:progress","_t":1792603761896,"id":"1","progress":0.20897959183673467,"total":155,"current":33}
+{"_e":"metro:bundling:progress","_t":1792603761996,"id":"1","progress":0.20897959183673467,"total":167,"current":44}
+{"_e":"metro:bundling:progress","_t":1792603762096,"id":"1","progress":0.20897959183673467,"total":180,"current":52}
+{"_e":"metro:bundling:progress","_t":1792603762197,"id":"1","progress":0.20897959183673467,"total":198,"current":62}
+{"_e":"metro:bundling:progress","_t":1792603762297,"id":"1","progress":0.20897959183673467,"total":207,"current":65}
+{"_e":"metro:bundling:progress","_t":1792603762400,"id":"1","progress":0.20897959183673467,"total":236,"current":93}
+{"_e":"metro:bundling:progress","_t":1792603762501,"id":"1","progress":0.21895336418654326,"total":265,"current":124}
+{"_e":"metro:bundling:progress","_t":1792603762601,"id":"1","progress":0.28342218311681594,"total":278,"current":148}
+{"_e":"metro:bundling:progress","_t":1792603762701,"id":"1","progress":0.28342218311681594,"total":352,"current":178}
+{"_e":"metro:bundling:progress","_t":1792603762801,"id":"1","progress":0.31057400173611105,"total":384,"current":214}
+{"_e":"metro:bundling:progress","_t":1792603762901,"id":"1","progress":0.33634463235000944,"total":419,"current":243}
+{"_e":"metro:bundling:progress","_t":1792603763001,"id":"1","progress":0.33634463235000944,"total":483,"current":272}
+{"_e":"metro:bundling:progress","_t":1792603763101,"id":"1","progress":0.3647681599843152,"total":505,"current":305}
+{"_e":"metro:bundling:progress","_t":1792603763202,"id":"1","progress":0.3946101615726043,"total":511,"current":321}
+{"_e":"metro:bundling:progress","_t":1792603763304,"id":"1","progress":0.3946101615726043,"total":551,"current":335}
+{"_e":"metro:bundling:progress","_t":1792603763405,"id":"1","progress":0.3946101615726043,"total":576,"current":352}
+{"_e":"metro:bundling:progress","_t":1792603763506,"id":"1","progress":0.4295562454346238,"total":592,"current":388}
+{"_e":"metro:bundling:progress","_t":1792603763606,"id":"1","progress":0.47877471383975023,"total":620,"current":429}
+{"_e":"metro:bundling:progress","_t":1792603763707,"id":"1","progress":0.5239211478282494,"total":659,"current":477}
+{"_e":"metro:bundling:progress","_t":1792603763807,"id":"1","progress":0.5261781967947892,"total":721,"current":523}
+{"_e":"metro:bundling:progress","_t":1792603763909,"id":"1","progress":0.5261781967947892,"total":788,"current":563}
+{"_e":"metro:bundling:progress","_t":1792603764010,"id":"1","progress":0.5560052090709259,"total":806,"current":601}
+{"_e":"metro:bundling:progress","_t":1792603764110,"id":"1","progress":0.5815433983748254,"total":834,"current":636}
+{"_e":"metro:bundling:progress","_t":1792603764211,"id":"1","progress":0.6257239594150616,"total":847,"current":670}
+{"_e":"metro:bundling:progress","_t":1792603764313,"id":"1","progress":0.6711463554471252,"total":863,"current":707}
+{"_e":"metro:bundling:progress","_t":1792603764414,"id":"1","progress":0.6711463554471252,"total":892,"current":728}
+{"_e":"metro:bundling:progress","_t":1792603764516,"id":"1","progress":0.6711463554471252,"total":928,"current":759}
+{"_e":"metro:bundling:progress","_t":1792603764617,"id":"1","progress":0.6915050003590921,"total":944,"current":785}
+{"_e":"metro:bundling:progress","_t":1792603764718,"id":"1","progress":0.6915050003590921,"total":988,"current":809}
+{"_e":"metro:bundling:progress","_t":1792603764818,"id":"1","progress":0.6915050003590921,"total":1003,"current":833}
+{"_e":"metro:bundling:progress","_t":1792603764919,"id":"1","progress":0.7087059645439072,"total":1018,"current":857}
+{"_e":"metro:bundling:progress","_t":1792603765019,"id":"1","progress":0.7301568984985352,"total":1024,"current":875}
+{"_e":"metro:bundling:progress","_t":1792603765120,"id":"1","progress":0.7560700426365446,"total":1027,"current":893}
+{"_e":"metro:bundling:progress","_t":1792603765221,"id":"1","progress":0.7995484965595249,"total":1030,"current":921}
+{"_e":"metro:bundling:progress","_t":1792603765321,"id":"1","progress":0.8256518121301775,"total":1040,"current":945}
+{"_e":"metro:bundling:progress","_t":1792603765426,"id":"1","progress":0.8602208496008392,"total":1048,"current":972}
+{"_e":"metro:bundling:progress","_t":1792603765527,"id":"1","progress":0.8643596907831345,"total":1067,"current":992}
+{"_e":"metro:bundling:progress","_t":1792603765630,"id":"1","progress":0.8932447809626826,"total":1075,"current":1016}
+{"_e":"metro:bundling:progress","_t":1792603765730,"id":"1","progress":0.8932447809626826,"total":1088,"current":1026}
+{"_e":"metro:bundling:progress","_t":1792603765852,"id":"1","progress":0.89659394329724,"total":1092,"current":1034}
+{"_e":"metro:bundling:progress","_t":1792603765952,"id":"1","progress":0.9174718976854552,"total":1115,"current":1068}
+{"_e":"metro:bundling:progress","_t":1792603766052,"id":"1","progress":0.9182609340345584,"total":1126,"current":1079}
+{"_e":"metro:bundling:progress","_t":1792603766152,"id":"1","progress":0.9182609340345584,"total":1154,"current":1105}
+{"_e":"metro:bundling:progress","_t":1792603766258,"id":"1","progress":0.9488140655242712,"total":1157,"current":1127}
+{"_e":"metro:bundling:progress","_t":1792603766366,"id":"1","progress":0.9488140655242712,"total":1186,"current":1148}
+{"_e":"metro:bundling:progress","_t":1792603766467,"id":"1","progress":0.9488140655242712,"total":1226,"current":1180}
+{"_e":"metro:bundling:progress","_t":1792603766566,"id":"1","progress":0.9759912716749515,"total":1242,"current":1227}
+{"_e":"metro:bundling:progress","_t":1792603766666,"id":"1","progress":0.9843385348680826,"total":1272,"current":1262}
+{"_e":"metro:bundling:progress","_t":1792603766772,"id":"1","progress":0.999,"total":1277,"current":1277}
+{"_e":"metro:bundling:done","_t":1792603767048,"id":"1","total":1277,"ms":6438.98375}
+{"_e":"metro:client_log","_t":1792603775153,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792603775154,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792603775252,"level":"error","data":["Failed to adopt XBee system connection:","[BleError: BluetoothLE is in unknown state]","\n\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  constructor (node_modules/react-native-ble-plx/src/BleError.js:33:10)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  parseBleError (node_modules/react-native-ble-plx/src/BleError.js:61:28)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  _callPromise (node_modules/react-native-ble-plx/src/BleManager.js:201:26)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  throw (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:9013)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  step (address at (InternalBytecode.js:1:6731)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:7923)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  tryCallOne (address at (InternalBytecode.js:1:1296)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:4984)\u001b[39m\u001b[22m"]}
+{"_e":"metro:client_log","_t":1792603775257,"level":"error","data":["Unable to send STATUS over BLE:","[BleError: BluetoothLE is in unknown state]","\n\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  constructor (node_modules/react-native-ble-plx/src/BleError.js:33:10)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  parseBleError (node_modules/react-native-ble-plx/src/BleError.js:61:28)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  _callPromise (node_modules/react-native-ble-plx/src/BleManager.js:201:26)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  throw (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:9013)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  step (address at (InternalBytecode.js:1:6731)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:7923)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  tryCallOne (address at (InternalBytecode.js:1:1296)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:4984)\u001b[39m\u001b[22m"]}
+{"_e":"metro:client_log","_t":1792603781539,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792603781540,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792603781550,"level":"log","data":["Found device: XBee3 Global LTE-M/NB/2G [5633720B-A5D1-61C7-DAC8-182DCAD6529F]"]}
+{"_e":"metro:client_log","_t":1792603781679,"level":"log","data":["XBee 3 completely bridged and ready."]}
+{"_e":"metro:client_log","_t":1792603781796,"level":"log","data":["Packet sent successfully to XBee!"]}
+{"_e":"metro:client_log","_t":1792603845117,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792603845124,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792603845124,"level":"log","data":["Found device: XBee3 Global LTE-M/NB/2G [5633720B-A5D1-61C7-DAC8-182DCAD6529F]"]}
+{"_e":"metro:client_log","_t":1792603845124,"level":"log","data":["XBee 3 completely bridged and ready."]}
+{"_e":"metro:client_log","_t":1792603845186,"level":"log","data":["Packet sent successfully to XBee!"]}
+{"_e":"metro:client_log","_t":1792603846983,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792603846985,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792603846986,"level":"log","data":["Found device: XBee3 Global LTE-M/NB/2G [5633720B-A5D1-61C7-DAC8-182DCAD6529F]"]}
+{"_e":"metro:client_log","_t":1792603846991,"level":"log","data":["XBee 3 completely bridged and ready."]}
+{"_e":"metro:client_log","_t":1792603847046,"level":"log","data":["Packet sent successfully to XBee!"]}
+{"_e":"root:init","_t":1792604254197,"format":"v0-jsonl","version":"57.0.29"}
+{"_e":"env:mode","_t":1792604254197,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1792604254198,"mode":"development","files":[],"env":{}}
+{"_e":"devserver:start","_t":1792604254476,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../src/app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1792604254652,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1792604254750,"plugins":[]}
+{"_e":"metro:instantiate","_t":1792604255046,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1792604443529,"id":"1","platform":"ios","environment":null,"entry":"node_modules/expo-router/entry.js"}
+{"_e":"metro:bundling:progress","_t":1792604443530,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792604443535,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792604443634,"id":"1","progress":0.12843730161381936,"total":346,"current":124}
+{"_e":"metro:bundling:progress","_t":1792604443734,"id":"1","progress":0.3495312951572781,"total":751,"current":444}
+{"_e":"metro:bundling:progress","_t":1792604443834,"id":"1","progress":0.773976811338107,"total":998,"current":878}
+{"_e":"metro:bundling:progress","_t":1792604443936,"id":"1","progress":0.9262489854329532,"total":1224,"current":1178}
+{"_e":"metro:bundling:done","_t":1792604443989,"id":"1","total":1224,"ms":459.314209}
+{"_e":"metro:client_log","_t":1792604454821,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792604454825,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792604454945,"level":"error","data":["Failed to adopt XBee system connection:","[BleError: BluetoothLE is in unknown state]","\n\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  constructor (node_modules/react-native-ble-plx/src/BleError.js:33:10)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  parseBleError (node_modules/react-native-ble-plx/src/BleError.js:61:28)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  _callPromise (node_modules/react-native-ble-plx/src/BleManager.js:201:26)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  throw (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:9013)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  step (address at (InternalBytecode.js:1:6731)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:7923)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  tryCallOne (address at (InternalBytecode.js:1:1296)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:4984)\u001b[39m\u001b[22m"]}
+{"_e":"metro:client_log","_t":1792604454949,"level":"error","data":["Unable to send STATUS over BLE:","[BleError: BluetoothLE is in unknown state]","\n\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  constructor (node_modules/react-native-ble-plx/src/BleError.js:33:10)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  parseBleError (node_modules/react-native-ble-plx/src/BleError.js:61:28)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  _callPromise (node_modules/react-native-ble-plx/src/BleManager.js:201:26)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  throw (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:9013)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  step (address at (InternalBytecode.js:1:6731)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:7923)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  tryCallOne (address at (InternalBytecode.js:1:1296)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:4984)\u001b[39m\u001b[22m"]}
+{"_e":"metro:client_log","_t":1792604467771,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792604467771,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792604467776,"level":"log","data":["Found device: XBee3 Global LTE-M/NB/2G [5633720B-A5D1-61C7-DAC8-182DCAD6529F]"]}
+{"_e":"metro:client_log","_t":1792604467789,"level":"log","data":["XBee 3 completely bridged and ready."]}
+{"_e":"metro:client_log","_t":1792604467909,"level":"log","data":["Packet sent successfully to XBee!"]}
+{"_e":"metro:client_log","_t":1792604469283,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792604469284,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792604469285,"level":"log","data":["Found device: XBee3 Global LTE-M/NB/2G [5633720B-A5D1-61C7-DAC8-182DCAD6529F]"]}
+{"_e":"metro:client_log","_t":1792604469292,"level":"log","data":["XBee 3 completely bridged and ready."]}
+{"_e":"metro:client_log","_t":1792604469347,"level":"log","data":["Packet sent successfully to XBee!"]}
+{"_e":"metro:client_log","_t":1792604469950,"level":"log","data":["GetStatus function called"]}
+{"_e":"metro:client_log","_t":1792604469950,"level":"log","data":["Looking for connected XBee modules..."]}
+{"_e":"metro:client_log","_t":1792604469952,"level":"log","data":["Found device: XBee3 Global LTE-M/NB/2G [5633720B-A5D1-61C7-DAC8-182DCAD6529F]"]}
+{"_e":"metro:client_log","_t":1792604469958,"level":"log","data":["XBee 3 completely bridged and ready."]}
+{"_e":"metro:client_log","_t":1792604470007,"level":"log","data":["Packet sent successfully to XBee!"]}
+{"_e":"metro:server_log","_t":1792604689673,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","com.anonymous.NoiseSensorMonitoring","iPhone","60"]}

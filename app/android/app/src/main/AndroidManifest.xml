@@ -32,6 +32,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="noisesensormonitoring"/>
+        <data android:scheme="exp+noise-sensor-monitoring"/>
       </intent-filter>
     </activity>
   </application>
