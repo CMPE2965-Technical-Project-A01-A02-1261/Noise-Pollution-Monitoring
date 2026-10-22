@@ -1,26 +1,22 @@
 
 import { Alert } from "react-native";
-import { adoptSystemXBeeConnection, sendDataToXBee } from "./BLEService";
+import { sendStatusToXBee } from "./BLEService";
 
-export const GetStatus = async (): Promise<void> => {
-    console.log("GetStatus function called");
+export const GetStatus = async (password: string): Promise<void> => {
+    if (!password.trim()) {
+        Alert.alert("Bluetooth password required", "Enter the XBee 3 BLE password to connect.");
+        return;
+    }
 
     try {
-        const device = await adoptSystemXBeeConnection();
-        if (!device) {
-            Alert.alert(
-                "XBee 3 not connected",
-                "Connect the XBee 3 Global to the phone, then try again."
-            );
-            return;
-        }
-
-        await sendDataToXBee(device, "STATUS");
+        await sendStatusToXBee(password);
     } catch (error) {
         console.error("Unable to send STATUS over BLE:", error);
         Alert.alert(
             "Bluetooth request failed",
-            "If you are running Expo Go, install an app development build to use BLE."
+            error instanceof Error
+                ? error.message
+                : "Check Bluetooth permissions, the XBee BLE password, and the device connection."
         );
     }
-}
+};

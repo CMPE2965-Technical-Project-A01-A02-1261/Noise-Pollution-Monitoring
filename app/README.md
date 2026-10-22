@@ -1,3 +1,5 @@
-## This folder is used to hold the mobile app source code and documentation
+# Noise Sensor Monitoring app
 
-The mobile companion app will interface with the device over bluetooth to receive diagnostic information and send commands to the device. It is built using React Mobile.
+The Expo mobile companion app connects to an XBee 3 Global over its BLE API service. Enter the BLE password configured on the XBee, then use **Get Status** to send an encrypted `USER_DATA_RELAY_INPUT` API frame to the MicroPython interface.
+
+The app scans for the XBee service, performs the BLE API `apiservice` SRP unlock, and encrypts API frames with the negotiated AES-CTR session key. Bluetooth requires a development build; Expo Go does not include `react-native-ble-plx`.

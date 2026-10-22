@@ -44,6 +44,7 @@
         "react-native-ble-plx",
         {
           "isBleRequired": true,
+          "neverForLocation": true,
           "bluetoothAlwaysPermission": "Allow app to connect to bluetooth devices"
         }
       ]
