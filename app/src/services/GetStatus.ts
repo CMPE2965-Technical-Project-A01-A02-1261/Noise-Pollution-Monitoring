@@ -1,6 +1,5 @@
 
 import { Alert } from "react-native";
-import { sendStatusToXBee } from "./BLEService";
 
 export const GetStatus = async (password: string): Promise<void> => {
     if (!password.trim()) {
@@ -9,6 +8,7 @@ export const GetStatus = async (password: string): Promise<void> => {
     }
 
     try {
+        const { sendStatusToXBee } = await import("./BLEService");
         await sendStatusToXBee(password);
     } catch (error) {
         console.error("Unable to send STATUS over BLE:", error);

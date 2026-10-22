@@ -47,7 +47,8 @@
           "neverForLocation": true,
           "bluetoothAlwaysPermission": "Allow app to connect to bluetooth devices"
         }
-      ]
+      ],
+      "./plugins/withIOSSceneLifecycle"
     ],
     "experiments": {
       "typedRoutes": true,

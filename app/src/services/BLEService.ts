@@ -4,6 +4,7 @@ import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
 import {
     BleManager as NativeBleManager,
+    State as BleState,
     type Device as BleDevice,
     type Subscription as BleSubscription,
 } from 'react-native-ble-plx';
@@ -16,6 +17,7 @@ const XBEE_REQUEST_CHARACTERISTIC_UUID = '7dddca00-3e05-4651-9254-44074792c590';
 const XBEE_RESPONSE_CHARACTERISTIC_UUID = 'f9279ee9-2cd0-410c-81cc-adf11e4e5aea';
 const BLE_USERNAME = 'apiservice';
 const SCAN_TIMEOUT_MS = 15_000;
+const BLUETOOTH_STATE_TIMEOUT_MS = 10_000;
 const FRAME_TIMEOUT_MS = 10_000;
 const MAX_FRAME_LENGTH = 0xffff + 4;
 
@@ -229,6 +231,58 @@ async function requestBluetoothPermissions(): Promise<void> {
     }
 }
 
+function bluetoothStateError(state: string): Error {
+    switch (state) {
+        case BleState.PoweredOff:
+            return new Error('Bluetooth is turned off. Turn on Bluetooth and try again.');
+        case BleState.Unauthorized:
+            return new Error('Bluetooth access is not allowed. Enable Bluetooth permission for this app in Settings.');
+        case BleState.Unsupported:
+            return new Error('This device does not support Bluetooth Low Energy.');
+        default:
+            return new Error(`Bluetooth is unavailable (${state}). Check Bluetooth and try again.`);
+    }
+}
+
+async function waitForBluetoothPoweredOn(): Promise<void> {
+    const bleManager = getManager();
+    const currentState = await bleManager.state();
+    if (currentState === BleState.PoweredOn) {
+        return;
+    }
+    if (
+        currentState === BleState.PoweredOff ||
+        currentState === BleState.Unauthorized ||
+        currentState === BleState.Unsupported
+    ) {
+        throw bluetoothStateError(currentState);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        let subscription: BleSubscription | undefined;
+        const timeout = setTimeout(() => {
+            subscription?.remove();
+            reject(new Error('Bluetooth is still initializing. Wait a moment, then try again.'));
+        }, BLUETOOTH_STATE_TIMEOUT_MS);
+
+        subscription = bleManager.onStateChange((state) => {
+            if (state === BleState.PoweredOn) {
+                clearTimeout(timeout);
+                subscription?.remove();
+                resolve();
+            } else if (
+                state === BleState.PoweredOff ||
+                state === BleState.Unauthorized ||
+                state === BleState.Unsupported
+            ) {
+                clearTimeout(timeout);
+                subscription?.remove();
+                reject(bluetoothStateError(state));
+            }
+        }, true);
+    });
+}
+
 async function findXBeeDevice(): Promise<BleDevice> {
     return new Promise((resolve, reject) => {
         let settled = false;
@@ -376,6 +430,7 @@ async function disconnectSession(session: XBeeSession): Promise<void> {
 
 async function connectAndAuthenticate(password: string): Promise<XBeeSession> {
     await requestBluetoothPermissions();
+    await waitForBluetoothPoweredOn();
     const foundDevice = await findXBeeDevice();
     const device = await foundDevice.connect();
     let subscription: BleSubscription | undefined;

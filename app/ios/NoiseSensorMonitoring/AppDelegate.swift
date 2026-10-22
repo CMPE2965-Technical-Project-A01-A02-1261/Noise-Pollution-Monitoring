@@ -20,6 +20,8 @@ class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
     reactNativeDelegate = delegate
     reactNativeFactory = factory
 
+
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
