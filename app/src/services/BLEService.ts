@@ -3,6 +3,7 @@ import { ctr } from '@noble/ciphers/aes.js';
 import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
 import {
+    BleErrorCode,
     BleManager as NativeBleManager,
     State as BleState,
     type Device as BleDevice,
@@ -16,7 +17,7 @@ const XBEE_SERVICE_UUID = '53da53b9-0447-425a-b9ea-9837505eb59a';
 const XBEE_REQUEST_CHARACTERISTIC_UUID = '7dddca00-3e05-4651-9254-44074792c590';
 const XBEE_RESPONSE_CHARACTERISTIC_UUID = 'f9279ee9-2cd0-410c-81cc-adf11e4e5aea';
 const BLE_USERNAME = 'apiservice';
-const SCAN_TIMEOUT_MS = 15_000;
+const SCAN_TIMEOUT_MS = 10_000;
 const BLUETOOTH_STATE_TIMEOUT_MS = 10_000;
 const FRAME_TIMEOUT_MS = 10_000;
 const MAX_FRAME_LENGTH = 0xffff + 4;
@@ -118,6 +119,9 @@ class FrameReader {
                 this.buffer = this.buffer.slice(totalLength);
                 const frame = xbeeFrame.decode(frameBytes);
                 this.onFrame(frame);
+                if (this.streaming) {
+                    publishXBeeFrame(frame);
+                }
 
                 if (!this.streaming) {
                     const waiter = this.waiters.shift();
@@ -135,7 +139,7 @@ class FrameReader {
         }
     }
 
-    nextFrame(): Promise<ParsedXBeeFrame> {
+    nextFrame(expectedResponse: string): Promise<ParsedXBeeFrame> {
         if (this.failure) {
             return Promise.reject(this.failure);
         }
@@ -153,7 +157,7 @@ class FrameReader {
                     if (index >= 0) {
                         this.waiters.splice(index, 1);
                     }
-                    reject(new Error('Timed out waiting for an XBee BLE API frame'));
+                    reject(new Error(`Timed out waiting for the XBee ${expectedResponse}.`));
                 }, FRAME_TIMEOUT_MS),
             };
             this.waiters.push(waiter);
@@ -179,9 +183,54 @@ interface XBeeSession {
     txCipher: CtrStream;
 }
 
+export interface XBeeBluetoothDevice {
+    id: string;
+    name: string;
+}
+
+export interface XBeeApiFrame {
+    type: number;
+    typeName: string;
+    id?: number;
+    status?: number;
+    source?: number;
+    data?: string;
+}
+
 let manager: NativeBleManager | undefined;
 let activeSession: XBeeSession | undefined;
 let nextFrameId = 1;
+const frameListeners = new Set<(frame: XBeeApiFrame) => void>();
+
+export function subscribeToXBeeFrames(listener: (frame: XBeeApiFrame) => void): () => void {
+    frameListeners.add(listener);
+    return () => frameListeners.delete(listener);
+}
+
+function publishXBeeFrame(frame: ParsedXBeeFrame): void {
+    const typeName =
+        frame.type === xbeeFrame.FrameType.TRANSMIT_STATUS
+            ? 'Transmit status'
+            : frame.type === xbeeFrame.FrameType.USER_DATA_RELAY_OUTPUT
+                ? 'User data relay output'
+                : `API frame 0x${frame.type.toString(16).padStart(2, '0').toUpperCase()}`;
+    const receivedFrame: XBeeApiFrame = {
+        type: frame.type,
+        typeName,
+        id: frame.id,
+        status: frame.status,
+        source: frame.source,
+        data: frame.data ? Buffer.from(frame.data).toString('utf8') : undefined,
+    };
+
+    for (const listener of frameListeners) {
+        try {
+            listener(receivedFrame);
+        } catch (error) {
+            console.error('XBee API frame listener failed:', error);
+        }
+    }
+}
 
 function getManager(): NativeBleManager {
     if (!manager) {
@@ -283,10 +332,14 @@ async function waitForBluetoothPoweredOn(): Promise<void> {
     });
 }
 
-async function findXBeeDevice(): Promise<BleDevice> {
+export async function scanForXBeeDevices(): Promise<XBeeBluetoothDevice[]> {
+    await requestBluetoothPermissions();
+    await waitForBluetoothPoweredOn();
+
     return new Promise((resolve, reject) => {
         let settled = false;
-        const finish = (device: BleDevice | null, error?: Error): void => {
+        const devices = new Map<string, XBeeBluetoothDevice>();
+        const finish = (error?: Error): void => {
             if (settled) {
                 return;
             }
@@ -297,10 +350,8 @@ async function findXBeeDevice(): Promise<BleDevice> {
                 .then(() => {
                     if (error) {
                         reject(error);
-                    } else if (device) {
-                        resolve(device);
                     } else {
-                        reject(new Error('XBee BLE scan ended without finding a device.'));
+                        resolve([...devices.values()]);
                     }
                 })
                 .catch((stopError: unknown) => {
@@ -308,23 +359,24 @@ async function findXBeeDevice(): Promise<BleDevice> {
                 });
         };
 
-        const timeout = setTimeout(() => {
-            finish(null, new Error('No XBee 3 found. Make sure it is powered on and Bluetooth is enabled.'));
-        }, SCAN_TIMEOUT_MS);
+        const timeout = setTimeout(() => finish(), SCAN_TIMEOUT_MS);
 
         void getManager()
             .startDeviceScan(null, null, (error, device) => {
                 if (error) {
-                    finish(null, error);
+                    finish(error);
                 } else if (
                     device &&
                     (device.serviceUUIDs?.some((uuid) => uuid.toLowerCase() === XBEE_SERVICE_UUID) ||
                         device.name?.toLowerCase().includes('xbee'))
                 ) {
-                    finish(device);
+                    devices.set(device.id, {
+                        id: device.id,
+                        name: device.name?.trim() || 'XBee device',
+                    });
                 }
             })
-            .catch((error: unknown) => finish(null, asError(error)));
+            .catch((error: unknown) => finish(asError(error)));
     });
 }
 
@@ -374,7 +426,7 @@ async function authenticate(
         })
     );
 
-    const step2 = await reader.nextFrame();
+    const step2 = await reader.nextFrame('BLE unlock step 2 response');
     requireUnlockResponse(step2, 2);
     if (!step2.salt || !step2.serverEphemeral) {
         throw new Error('XBee BLE unlock response is missing its salt or server key.');
@@ -400,7 +452,7 @@ async function authenticate(
         })
     );
 
-    const step4 = await reader.nextFrame();
+    const step4 = await reader.nextFrame('BLE unlock step 4 response');
     requireUnlockResponse(step4, 4);
     if (!step4.serverSessionProof || !step4.txNonce || !step4.rxNonce) {
         throw new Error('XBee BLE unlock response is missing session proof or nonces.');
@@ -428,12 +480,12 @@ async function disconnectSession(session: XBeeSession): Promise<void> {
     await session.device.cancelConnection();
 }
 
-async function connectAndAuthenticate(password: string): Promise<XBeeSession> {
+async function connectAndAuthenticate(deviceId: string, password: string): Promise<XBeeSession> {
     await requestBluetoothPermissions();
     await waitForBluetoothPoweredOn();
-    const foundDevice = await findXBeeDevice();
-    const device = await foundDevice.connect();
+    const device = await getManager().connectToDevice(deviceId);
     let subscription: BleSubscription | undefined;
+    let isClosing = false;
 
     try {
         await device.discoverAllServicesAndCharacteristics();
@@ -468,6 +520,9 @@ async function connectAndAuthenticate(password: string): Promise<XBeeSession> {
             XBEE_RESPONSE_CHARACTERISTIC_UUID,
             (error, characteristic) => {
                 if (error) {
+                    if (isClosing && error.errorCode === BleErrorCode.OperationCancelled) {
+                        return;
+                    }
                     console.error('XBee BLE indication failed:', error);
                     reader.fail(error);
                 } else if (characteristic?.value) {
@@ -487,6 +542,7 @@ async function connectAndAuthenticate(password: string): Promise<XBeeSession> {
         activeSession = session;
         return session;
     } catch (error) {
+        isClosing = true;
         subscription?.remove();
         try {
             await device.cancelConnection();
@@ -497,27 +553,37 @@ async function connectAndAuthenticate(password: string): Promise<XBeeSession> {
     }
 }
 
-export async function sendStatusToXBee(password: string): Promise<void> {
+export async function connectToXBee(deviceId: string, password: string): Promise<void> {
     if (activeSession) {
-        const existingSession = activeSession;
-        const connected = await existingSession.device.isConnected();
-        if (!connected || existingSession.reader.hasFailed) {
-            activeSession = undefined;
-            existingSession.subscription.remove();
-            if (connected) {
-                await existingSession.device.cancelConnection();
-            }
-        }
+        await disconnectSession(activeSession);
     }
 
-    const session = activeSession ?? (await connectAndAuthenticate(password));
+    await connectAndAuthenticate(deviceId, password);
+}
+
+export async function sendStatusToXBee(): Promise<void> {
+    const session = activeSession;
+    if (!session) {
+        throw new Error('No XBee is connected. Scan for a device and connect before requesting status.');
+    }
+
+    const connected = await session.device.isConnected();
+    if (!connected || session.reader.hasFailed) {
+        activeSession = undefined;
+        session.subscription.remove();
+        if (connected) {
+            await session.device.cancelConnection();
+        }
+        throw new Error('The XBee connection was lost. Scan for the device and connect again.');
+    }
+
     const frameId = nextFrameId;
     nextFrameId = nextFrameId === 0xff ? 1 : nextFrameId + 1;
 
     const frame = xbeeFrame.encode({
         type: xbeeFrame.FrameType.USER_DATA_RELAY_INPUT,
         id: frameId,
-        destination: xbeeFrame.Interface.MICROPYTHON,
+        destination: xbeeFrame.Interface.SERIAL,
         data: Buffer.from('STATUS', 'utf8'),
     });
 

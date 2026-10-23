@@ -4,9 +4,11 @@ declare module 'xbee-frame' {
         BLE_UNLOCK_RESPONSE: number;
         USER_DATA_RELAY_INPUT: number;
         USER_DATA_RELAY_OUTPUT: number;
+        TRANSMIT_STATUS: number;
     };
 
     export const Interface: {
+        SERIAL: number;
         MICROPYTHON: number;
     };
 
@@ -30,6 +32,7 @@ declare module 'xbee-frame' {
 
     export interface DecodedFrame {
         type: number;
+        id?: number;
         step?: number;
         salt?: Uint8Array;
         serverEphemeral?: Uint8Array;
