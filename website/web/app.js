@@ -14,6 +14,18 @@ async function loadSession(id) {
   return { ...s, readings: sampleReadings(s) };
 }
 
+// async function loadSessions() {
+//   const res = await fetch('/api/sessions');
+//   if (!res.ok) throw new Error(`server answered ${res.status}`);
+//   return (await res.json()).sessions;
+// }
+
+// async function loadSession(id) {
+//   const res = await fetch(`/api/sessions/${id}`);
+//   const body = await res.json().catch(() => ({}));
+//   if (!res.ok) throw new Error(body.error || `server answered ${res.status}`);
+//   return body;
+// }
 // ---------- functions ----------
 
 function h(tag, attrs, ...kids) {
@@ -119,7 +131,57 @@ function buildChart(readings) {
   timeLabel(readings[0].ts, left, 'start');
   timeLabel(readings[readings.length - 1].ts, W - right, 'end');
 
-  return chart;
+    // Hover: a guide line, a dot, and a text readout under the chart
+  const guide = svg('line', { y1: top, y2: H - bottom, class: 'guide', visibility: 'hidden' });
+  const dot = svg('circle', { r: 4, class: 'hover-dot', visibility: 'hidden' });
+  chart.append(guide, dot);
+
+  const hint = 'Move the mouse over the chart to see a reading.';
+  const readout = h('p', { class: 'meta readout' }, hint);
+
+  // A see-through rectangle on top of the plot that catches the mouse.
+  const overlay = svg('rect', { x: left, y: top, width: plotW, height: plotH, fill: 'transparent' });
+  overlay.addEventListener('mousemove', (e) => {
+    const box = chart.getBoundingClientRect();
+    const px = ((e.clientX - box.left) / box.width) * W;   // mouse position in drawing units
+    const i = readings.length > 1
+      ? Math.max(0, Math.min(readings.length - 1, Math.round(((px - left) / plotW) * (readings.length - 1))))
+      : 0;
+    const r = readings[i];
+    guide.setAttribute('x1', x(i));
+    guide.setAttribute('x2', x(i));
+    guide.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', x(i));
+    dot.setAttribute('cy', y(r.db));
+    dot.setAttribute('visibility', 'visible');
+    readout.textContent =
+      `${new Date(r.ts).toLocaleTimeString()}    ${r.db.toFixed(1)} dB${r.clipped ? '    (mic maxed out)' : ''}`;
+  });
+  overlay.addEventListener('mouseleave', () => {
+    guide.setAttribute('visibility', 'hidden');
+    dot.setAttribute('visibility', 'hidden');
+    readout.textContent = hint;
+  });
+  chart.append(overlay);
+
+  return h('div', {}, chart, readout);
+}
+
+// Builds a CSV file from the readings on the page and downloads it.
+function downloadCsv(session) {
+  const lines = ['timestamp_utc,db,latitude,longitude,clipped'];
+  for (const r of session.readings) {
+    const lat = r.lat ?? (session.location ? session.location.lat : '');
+    const lon = r.lon ?? (session.location ? session.location.lon : '');
+    lines.push([r.ts, r.db, lat, lon, r.clipped ? 'true' : 'false'].join(','));
+  }
+  const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const link = h('a', { href: url, download: `session-${session.id}.csv` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ---------- pages ----------
@@ -159,6 +221,10 @@ async function showSession(id) {
       h('td', {}, r.db.toFixed(1)),
       h('td', {}, r.clipped ? 'yes' : '')));
 
+  // ---------- download CSV button ----------
+  const csvButton = h('button', { type: 'button', class: 'button' }, 'Download raw data (CSV)');
+  csvButton.addEventListener('click', () => downloadCsv(s));      
+  
   show(
     h('p', {}, h('a', { href: '#/' }, '← All sessions')),
     h('h1', {}, `Session ${s.id}`),
@@ -179,6 +245,7 @@ async function showSession(id) {
     buildChart(s.readings),
 
     h('h2', {}, 'Raw data'),
+    h('div', { class: 'toolbar' }, csvButton),
     h('p', { class: 'meta' }, `First ${RAW_ROWS_SHOWN} of ${s.readings.length} readings.`),
     h('table', {},
       h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB'), h('th', {}, 'Mic maxed out'))),
