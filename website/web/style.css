@@ -1,0 +1,143 @@
+body { 
+    font-family: system-ui, sans-serif; 
+    margin: 0; 
+    background: #f6f7f9; 
+    color: #1c2430; 
+}
+
+.top { 
+    display: flex; 
+    align-items: baseline; 
+    gap: 12px; 
+    padding: 14px 16px; 
+    background: #fff; 
+    border-bottom: 1px solid #dfe3ea; 
+}
+
+.brand { 
+    font-weight: 700; 
+    font-size: 1.15rem; 
+    text-decoration: none; 
+    color: inherit; 
+}
+
+.sub { 
+    color: hsl(215, 12%, 42%); 
+    font-size: 0.9rem; 
+}
+
+main { 
+    max-width: 1000px; 
+    margin: 16px auto; 
+    padding: 0 16px; 
+}
+
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    background: #fff; 
+    border: 1px solid #dfe3ea; 
+}
+
+th, td { 
+    text-align: left; 
+    padding: 8px 10px; 
+    border-bottom: 1px solid #dfe3ea; 
+}
+
+th { 
+    color: #5d6877; 
+    font-size: 0.82rem; 
+}
+
+.badge { 
+    background: #fff4d6; 
+    color: #6b4a00; 
+    padding: 2px 8px; 
+    border-radius: 10px; 
+    font-size: 0.8rem; 
+    margin-right: 4px; }
+
+h1 { 
+    margin: 8px 0 4px; 
+}
+
+.meta { 
+    color: #5d6877; 
+    margin: 0 0 12px; 
+}
+
+.error { 
+    color: #c43a31; 
+}
+
+.warning { 
+    background: #fff4d6; 
+    color: #6b4a00; 
+    padding: 10px 12px; 
+    border-radius: 6px; 
+    margin-bottom: 8px; 
+}
+
+.stats { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); 
+    gap: 10px; 
+    margin: 16px 0 8px; 
+}
+
+.stat { 
+    background: #fff; 
+    border: 1px solid #dfe3ea; 
+    border-radius: 8px; 
+    padding: 10px 12px; 
+}
+
+.stat-label { 
+    color: #5d6877; 
+    font-size: 0.82rem; 
+}
+
+.stat-value { 
+    font-size: 1.4rem; 
+    font-weight: 600; 
+}
+
+.unit { 
+    font-size: 0.8rem; 
+    font-weight: 400; 
+    color: #5d6877; 
+}
+
+
+svg.chart { 
+    width: 100%; 
+    height: auto; 
+    background: #fff; 
+    border: 1px solid #dfe3ea; 
+    border-radius: 8px; 
+}
+
+svg.chart .grid { 
+    stroke: #dfe3ea; 
+    stroke-width: 1; 
+}
+
+svg.chart .axis-label { 
+    fill: #5d6877; 
+    font-size: 11px; 
+}
+
+svg.chart .line { 
+    fill: none; 
+    stroke: #1d6fb8; 
+    stroke-width: 1.5; 
+}
+
+svg.chart .clip { 
+    fill: #c43a31; 
+}
+
+h2 { 
+    margin: 24px 0 8px; 
+}
