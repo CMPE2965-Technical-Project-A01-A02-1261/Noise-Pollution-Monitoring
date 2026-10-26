@@ -4,28 +4,29 @@ const app = document.getElementById('app');
 
 // ---------- data (the only part that changes when the server exists) ----------
 
-async function loadSessions() {
-  return SAMPLE_SESSIONS;
-}
-
-async function loadSession(id) {
-  const s = SAMPLE_SESSIONS.find((x) => x.id === id);
-  if (!s) throw new Error('session not found');
-  return { ...s, readings: sampleReadings(s) };
-}
-
 // async function loadSessions() {
-//   const res = await fetch('/api/sessions');
-//   if (!res.ok) throw new Error(`server answered ${res.status}`);
-//   return (await res.json()).sessions;
+//   return SAMPLE_SESSIONS;
 // }
 
 // async function loadSession(id) {
-//   const res = await fetch(`/api/sessions/${id}`);
-//   const body = await res.json().catch(() => ({}));
-//   if (!res.ok) throw new Error(body.error || `server answered ${res.status}`);
-//   return body;
+//   const s = SAMPLE_SESSIONS.find((x) => x.id === id);
+//   if (!s) throw new Error('session not found');
+//   return { ...s, readings: sampleReadings(s) };
 // }
+
+async function loadSessions() {
+  const res = await fetch('api/sessions.php');
+  if (!res.ok) throw new Error(`server answered ${res.status}`);
+  return (await res.json()).sessions;
+}
+
+async function loadSession(id) {
+  const res = await fetch(`api/sessions.php?id=${id}`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `server answered ${res.status}`);
+  return body;
+}
+
 // ---------- functions ----------
 
 function h(tag, attrs, ...kids) {
