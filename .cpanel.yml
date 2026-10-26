@@ -2,6 +2,5 @@
 deployment:
   tasks:
     - export DEPLOY=/home/lantiveros1t1251/public_html/noise
-    - /bin/mkdir -p $DEPLOY/api
+    - /bin/mkdir -p $DEPLOY
     - /bin/cp -R website/web/. $DEPLOY/
-    - /bin/cp -R website/api/. $DEPLOY/api/
