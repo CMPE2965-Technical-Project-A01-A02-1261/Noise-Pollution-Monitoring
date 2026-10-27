@@ -1,0 +1,10 @@
+# local settings with account details
+.vscode/sftp.json
+
+# junk and generated files
+.DS_Store
+node_modules/
+website/data/
+
+# secrets must never be committed
+noise-config.php
