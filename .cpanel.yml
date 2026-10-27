@@ -1,0 +1,9 @@
+---
+deployment:
+  tasks:
+    - export DEPLOY=/home/lantiveros1t1251/public_html/noise
+    - /bin/mkdir -p $DEPLOY
+    - /bin/cp -R website/web/. $DEPLOY/
+
+
+-- Git Version Control on CPanel didn.t work. Can't clone files in the GitHub repo. Will try manual uploading later.
