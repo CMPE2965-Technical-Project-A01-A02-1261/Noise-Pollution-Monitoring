@@ -185,6 +185,90 @@ function downloadCsv(session) {
   URL.revokeObjectURL(url);
 }
 
+// ---------- map ----------
+
+// Colour for a sound level. The 55 and 70 dB limits are placeholders until the team picks its own.
+function levelColor(db) {
+  if (db < 55) return '#2e8b57';   // quiet
+  if (db < 70) return '#e0a100';   // moderate
+  return '#c43a31';                // loud
+}
+
+const MAX_MAP_POINTS = 1000;       // thin out very long sessions so the map stays fast
+
+function buildMap(session) {
+  const all = session.readings.filter((r) => r.lat !== null && r.lat !== undefined && r.lon !== null && r.lon !== undefined);
+  if (all.length === 0 && !session.location) {
+    return h('p', { class: 'meta' }, 'No GPS position was received, so there is no map for this session.');
+  }
+
+  const step = Math.ceil(all.length / MAX_MAP_POINTS) || 1;
+  const points = all.filter((r, i) => i % step === 0);
+
+  const box = h('div', { class: 'map' });
+  const legend = h('p', { class: 'meta' },
+    'Dots show where each reading was taken: ',
+    h('span', { class: 'swatch', style: `background:${levelColor(0)}` }), ' under 55 dB  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(60)}` }), ' 55 to 70 dB  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(80)}` }), ' 70 dB or more. Click a dot for its time and level.');
+
+  // Leaflet measures the box, so it can only be set up after the box is on the page.
+  setTimeout(() => {
+    const map = L.map(box);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    const latlngs = points.map((r) => [r.lat, r.lon]);
+    if (latlngs.length > 1) {
+      L.polyline(latlngs, { color: '#5d6877', weight: 2, opacity: 0.6 }).addTo(map);
+    }
+    for (const r of points) {
+      L.circleMarker([r.lat, r.lon], {
+        radius: 4, color: '#ffffff', weight: 1, fillColor: levelColor(r.db), fillOpacity: 0.95,
+      }).bindPopup(`${new Date(r.ts).toLocaleTimeString()}<br>${r.db.toFixed(1)} dB${r.clipped ? ' (mic maxed out)' : ''}`).addTo(map);
+    }
+    if (latlngs.length === 0) {
+        latlngs.push([session.location.lat, session.location.lon]);
+        L.marker(latlngs[0]).bindPopup(
+          `Session location<br>${session.location.lat.toFixed(5)}, ${session.location.lon.toFixed(5)}<br>` +
+          `Started ${new Date(session.started_at).toLocaleTimeString()}`
+        ).addTo(map).openPopup();
+    }
+    map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30], maxZoom: 18 });
+  }, 0);
+
+  return h('div', {}, box, legend);
+}
+
+// Groups the per-second readings by clock minute and works out each minute's values.
+function perMinute(readings) {
+  const groups = new Map();
+  for (const r of readings) {
+    const minute = Math.floor(Date.parse(r.ts) / 60000);
+    if (!groups.has(minute)) groups.set(minute, []);
+    groups.get(minute).push(r.db);
+  }
+  return [...groups.entries()].map(([minute, dbs]) => {
+    // Leq is an energy average: convert to energy, average, convert back to dB.
+    const energy = dbs.reduce((sum, db) => sum + Math.pow(10, db / 10), 0) / dbs.length;
+    return { start_ms: minute * 60000, leq: 10 * Math.log10(energy), lmax: Math.max(...dbs), n: dbs.length };
+  });
+}
+
+function minuteTable(readings) {
+  const rows = perMinute(readings).map((m) =>
+    h('tr', {},
+      h('td', {}, new Date(m.start_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+      h('td', {}, m.leq.toFixed(1)),
+      h('td', {}, m.lmax.toFixed(1)),
+      h('td', {}, m.n)));
+  return h('table', {},
+    h('thead', {}, h('tr', {}, h('th', {}, 'Minute'), h('th', {}, 'Leq (dB)'), h('th', {}, 'Lmax (dB)'), h('th', {}, 'Readings'))),
+    h('tbody', {}, rows));
+}
+
 // ---------- pages ----------
 
 async function showList() {
@@ -242,8 +326,14 @@ async function showSession(id) {
     h('p', { class: 'meta' },
       'Leq is the average level (energy basis). L10, L50 and L90 are the levels exceeded 10%, 50% and 90% of the time.'),
 
+    h('h2', {}, 'Location of readings'),
+    buildMap(s),
+    
     h('h2', {}, 'Sound level over time (dB)'),
     buildChart(s.readings),
+
+    h('h2', {}, 'Interpreted data (per minute)'),
+    minuteTable(s.readings),
 
     h('h2', {}, 'Raw data'),
     h('div', { class: 'toolbar' }, csvButton),

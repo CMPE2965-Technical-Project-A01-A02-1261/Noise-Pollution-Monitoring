@@ -172,3 +172,17 @@ svg.chart .hover-dot {
 .button:hover { 
     background: #185d9a; 
 }
+
+.map { 
+    height: 360px; 
+    border: 1px solid #dfe3ea; 
+    border-radius: 8px; 
+}
+
+.swatch { 
+    display: inline-block; 
+    width: 12px; 
+    height: 12px; 
+    border-radius: 50%; 
+    vertical-align: middle; 
+}
