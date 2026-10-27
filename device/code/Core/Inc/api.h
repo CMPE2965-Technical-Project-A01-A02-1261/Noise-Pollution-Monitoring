@@ -7,8 +7,9 @@
 typedef struct
 {
 	uint8_t frame_type;
-	uint8_t frame_id; /* Zero for Modem Status frames (0x8A). */
-	uint8_t status;
+	uint8_t frame_id; /* Zero for frames that do not carry a frame ID. */
+	uint16_t data_length;
+	char data[256]; /* Frame data after the type and any frame ID. */
 } API_Status;
 
 bool SendBLE(const uint8_t, uint8_t);

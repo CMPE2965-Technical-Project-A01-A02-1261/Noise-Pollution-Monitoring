@@ -108,8 +108,6 @@ int main(void) {
   if (HAL_UART_Receive_IT(&huart1, &api_rx_byte, 1) != HAL_OK) {
     Error_Handler();
   }
-  bool send = false;
-  char num[10] = "##########"; // phone number
   API_Status api_status;
 
   /* USER CODE END 2 */
@@ -118,20 +116,19 @@ int main(void) {
   /* USER CODE BEGIN WHILE */
   while (1) {
     while (API_ReadStatus(&api_status)) {
-      if (api_status.frame_type == 0x89) {
+      if (api_status.frame_type == 0x89 && api_status.data_length > 0) {
         printf("API TX Status: frame ID=0x%02X status=0x%02X\r\n",
-               api_status.frame_id, api_status.status);
-      } else if (api_status.frame_type == 0x8A) {
-        printf("API Modem Status: status=0x%02X\r\n", api_status.status);
+               api_status.frame_id, (uint8_t)api_status.data[0]);
+      } else if (api_status.frame_type == 0x8A &&
+                 api_status.data_length > 0) {
+        printf("API Modem Status: status=0x%02X\r\n",
+               (uint8_t)api_status.data[0]);
+      } else if (api_status.frame_type == 0xAD) {
+        printf("User data relay: %.*s\r\n", (int)api_status.data_length,
+               api_status.data);
       }
     }
 
-    if (!send) {
-      printf("a");
-      SendSMS("test", 4, num);
-      send = true;
-      SendSMS("test", 4, num);
-    }
 
     /* USER CODE END WHILE */
 

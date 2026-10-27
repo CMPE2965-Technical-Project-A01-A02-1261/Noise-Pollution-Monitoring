@@ -20,17 +20,25 @@ typedef enum
 static API_RxState rx_state;
 static uint16_t rx_length;
 static uint16_t rx_data_index;
+static uint16_t rx_payload_length;
 static uint8_t rx_checksum;
 static uint8_t rx_frame_type;
 static uint8_t rx_frame_id;
-static uint8_t rx_status;
+static char rx_data[256];
+static bool rx_payload_too_large;
 
 static volatile API_Status status_queue[API_STATUS_QUEUE_SIZE];
 static volatile uint8_t status_queue_head;
 static volatile uint8_t status_queue_tail;
 static volatile uint8_t dropped_status_count;
 
-static void API_QueueStatus(uint8_t frame_type, uint8_t frame_id, uint8_t status)
+static bool API_FrameHasId(uint8_t frame_type)
+{
+	return frame_type == 0x88 || frame_type == 0x89 ||
+	       frame_type == 0x8B || frame_type == 0x97;
+}
+
+static void API_QueueFrame(void)
 {
 	uint8_t next_head = (uint8_t)((status_queue_head + 1u) % API_STATUS_QUEUE_SIZE);
 	if (next_head == status_queue_tail)
@@ -39,9 +47,13 @@ static void API_QueueStatus(uint8_t frame_type, uint8_t frame_id, uint8_t status
 		return;
 	}
 
-	status_queue[status_queue_head].frame_type = frame_type;
-	status_queue[status_queue_head].frame_id = frame_id;
-	status_queue[status_queue_head].status = status;
+	status_queue[status_queue_head].frame_type = rx_frame_type;
+	status_queue[status_queue_head].frame_id = rx_frame_id;
+	status_queue[status_queue_head].data_length = rx_payload_length;
+	for (uint16_t i = 0; i < rx_payload_length; i++)
+	{
+		status_queue[status_queue_head].data[i] = rx_data[i];
+	}
 	status_queue_head = next_head;
 }
 
@@ -50,10 +62,11 @@ void API_ResetParser(void)
 	rx_state = API_RX_WAIT_START;
 	rx_length = 0;
 	rx_data_index = 0;
+	rx_payload_length = 0;
 	rx_checksum = 0;
 	rx_frame_type = 0;
 	rx_frame_id = 0;
-	rx_status = 0;
+	rx_payload_too_large = false;
 }
 
 void API_ProcessByte(uint8_t byte)
@@ -65,7 +78,9 @@ void API_ProcessByte(uint8_t byte)
 		{
 			rx_length = 0;
 			rx_data_index = 0;
+			rx_payload_length = 0;
 			rx_checksum = 0;
+			rx_payload_too_large = false;
 			rx_state = API_RX_LENGTH_HIGH;
 		}
 		break;
@@ -92,20 +107,21 @@ void API_ProcessByte(uint8_t byte)
 		{
 			rx_frame_type = byte;
 		}
-		else if (rx_data_index == 1)
+		else if (rx_data_index == 1 && API_FrameHasId(rx_frame_type))
 		{
-			if (rx_frame_type == 0x8A)
+			rx_frame_id = byte;
+		}
+		else
+		{
+			if (rx_payload_length < sizeof(rx_data))
 			{
-				rx_status = byte;
+				rx_data[rx_payload_length] = (char)byte;
 			}
 			else
 			{
-				rx_frame_id = byte;
+				rx_payload_too_large = true;
 			}
-		}
-		else if (rx_data_index == 2)
-		{
-			rx_status = byte;
+			rx_payload_length++;
 		}
 
 		rx_checksum = (uint8_t)(rx_checksum + byte);
@@ -119,13 +135,9 @@ void API_ProcessByte(uint8_t byte)
 	case API_RX_CHECKSUM:
 		if ((uint8_t)(rx_checksum + byte) == 0xFF)
 		{
-			if (rx_frame_type == 0x89 && rx_length == 3)
+			if (!rx_payload_too_large)
 			{
-				API_QueueStatus(rx_frame_type, rx_frame_id, rx_status);
-			}
-			else if (rx_frame_type == 0x8A && rx_length == 2)
-			{
-				API_QueueStatus(rx_frame_type, 0, rx_status);
+				API_QueueFrame();
 			}
 		}
 		API_ResetParser();
@@ -142,7 +154,11 @@ bool API_ReadStatus(API_Status *status)
 
 	status->frame_type = status_queue[status_queue_tail].frame_type;
 	status->frame_id = status_queue[status_queue_tail].frame_id;
-	status->status = status_queue[status_queue_tail].status;
+	status->data_length = status_queue[status_queue_tail].data_length;
+	for (uint16_t i = 0; i < status->data_length; i++)
+	{
+		status->data[i] = status_queue[status_queue_tail].data[i];
+	}
 	status_queue_tail = (uint8_t)((status_queue_tail + 1u) % API_STATUS_QUEUE_SIZE);
 	return true;
 }
@@ -150,6 +166,19 @@ bool API_ReadStatus(API_Status *status)
 uint8_t API_GetDroppedStatusCount(void)
 {
 	return dropped_status_count;
+}
+
+void API_RxBluetooth(const uint8_t *data, uint16_t length){
+	if (data[0] != 1){
+		return; //not from bluetooth on xbee
+	}
+	//extract msg from rest of data array
+	char *msg = (char *)(data+1);
+	length --;
+	//status message received
+	if (strncmp(msg, "STATUS", length)){
+
+	}
 }
 
 bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10])
