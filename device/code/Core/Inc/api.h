@@ -1,5 +1,7 @@
 #ifndef API_H
 #define API_H
+#include "string.h"
+#include "stdio.h"
 
 #include "stm32g0xx_hal.h"
 #include "stdbool.h"
@@ -15,6 +17,7 @@ typedef struct
 bool SendBLE(const uint8_t, uint8_t);
 bool SendCell(const uint8_t, uint8_t);
 bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10]);
+void API_RxBluetooth(const uint8_t *data, uint16_t length);
 
 uint16_t MakeFrame(uint8_t *frame, uint8_t length, const uint8_t *data);
 

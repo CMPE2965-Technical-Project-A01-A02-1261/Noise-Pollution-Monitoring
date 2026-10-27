@@ -52,3 +52,14 @@
 235	328	1793139158314893604	code.elf	b57b7710091eaaac
 11	294	1793139581298764889	CMakeFiles/code.dir/Core/Src/main.c.obj	69aae0fc830d1a35
 294	459	1793139581581876002	code.elf	b57b7710091eaaac
+3	241	1793145180395211671	CMakeFiles/code.dir/Core/Src/stm32g0xx_it.c.obj	71cd7920d0288d65
+4	287	1793145180396211628	CMakeFiles/code.dir/Core/Src/stm32g0xx_hal_msp.c.obj	5a89039ee6cd044b
+2	202	1793145220516833541	CMakeFiles/code.dir/Core/Src/stm32g0xx_it.c.obj	71cd7920d0288d65
+2	233	1793145220517221215	CMakeFiles/code.dir/Core/Src/stm32g0xx_hal_msp.c.obj	5a89039ee6cd044b
+3	195	1793145259689908838	CMakeFiles/code.dir/Core/Src/stm32g0xx_it.c.obj	71cd7920d0288d65
+3	196	1793145259690760802	CMakeFiles/code.dir/Core/Src/stm32g0xx_hal_msp.c.obj	5a89039ee6cd044b
+2	260	1793145259688908854	CMakeFiles/code.dir/Core/Src/main.c.obj	69aae0fc830d1a35
+3	286	1793145259690974476	CMakeFiles/code.dir/Core/Src/api.c.obj	87044dfae4fb755b
+286	387	1793145259972904268	code.elf	b57b7710091eaaac
+2	171	1793145457770243993	CMakeFiles/code.dir/Core/Src/api.c.obj	87044dfae4fb755b
+171	256	1793145457938248084	code.elf	b57b7710091eaaac

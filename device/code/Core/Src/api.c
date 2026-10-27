@@ -176,8 +176,8 @@ void API_RxBluetooth(const uint8_t *data, uint16_t length){
 	char *msg = (char *)(data+1);
 	length --;
 	//status message received
-	if (strncmp(msg, "STATUS", length)){
-
+	if (!strncmp(msg, "STATUS", length)){
+		printf("yay");
 	}
 }
 

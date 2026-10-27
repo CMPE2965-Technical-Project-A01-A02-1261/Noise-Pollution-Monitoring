@@ -126,6 +126,7 @@ int main(void) {
       } else if (api_status.frame_type == 0xAD) {
         printf("User data relay: %.*s\r\n", (int)api_status.data_length,
                api_status.data);
+        API_RxBluetooth(api_status.data, api_status.data_length);
       }
     }
 
