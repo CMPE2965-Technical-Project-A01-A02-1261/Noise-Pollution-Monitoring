@@ -1,0 +1,7 @@
+/home/sadie/capstone/device/code/Core/Src/api.c:33:13:API_QueueStatus	32	static
+/home/sadie/capstone/device/code/Core/Src/api.c:48:6:API_ResetParser	8	static
+/home/sadie/capstone/device/code/Core/Src/api.c:59:6:API_ProcessByte	16	static
+/home/sadie/capstone/device/code/Core/Src/api.c:136:6:API_ReadStatus	16	static
+/home/sadie/capstone/device/code/Core/Src/api.c:150:9:API_GetDroppedStatusCount	8	static
+/home/sadie/capstone/device/code/Core/Src/api.c:155:6:SendSMS	568	static
+/home/sadie/capstone/device/code/Core/Src/api.c:193:10:MakeFrame	32	static
