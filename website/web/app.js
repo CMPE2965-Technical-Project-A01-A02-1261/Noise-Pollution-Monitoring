@@ -230,11 +230,11 @@ function buildMap(session) {
       }).bindPopup(`${new Date(r.ts).toLocaleTimeString()}<br>${r.db.toFixed(1)} dB${r.clipped ? ' (mic maxed out)' : ''}`).addTo(map);
     }
     if (latlngs.length === 0) {
-        latlngs.push([session.location.lat, session.location.lon]);
-        L.marker(latlngs[0]).bindPopup(
-          `Session location<br>${session.location.lat.toFixed(5)}, ${session.location.lon.toFixed(5)}<br>` +
-          `Started ${new Date(session.started_at).toLocaleTimeString()}`
-        ).addTo(map).openPopup();
+    latlngs.push([session.location.lat, session.location.lon]);
+    L.marker(latlngs[0]).bindPopup(
+      `Session location<br>${session.location.lat.toFixed(5)}, ${session.location.lon.toFixed(5)}<br>` +
+      `Started ${new Date(session.started_at).toLocaleTimeString()}`
+    ).addTo(map).openPopup();
     }
     map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30], maxZoom: 18 });
   }, 0);
@@ -269,6 +269,70 @@ function minuteTable(readings) {
     h('tbody', {}, rows));
 }
 
+// A map pin (teardrop) in the given colour. With count > 1 the pin shows how many sessions it holds.
+function pinIcon(color, count) {
+  const middle = count > 1
+    ? `<circle cx="14" cy="14" r="8" fill="#ffffff"/><text x="14" y="18" text-anchor="middle" font-size="11" font-weight="700" font-family="Arial, sans-serif" fill="#1b2a38">${count}</text>`
+    : `<circle cx="14" cy="14" r="5" fill="#ffffff"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="38" viewBox="0 0 28 38">` +
+    `<path d="M14 1C6.8 1 1 6.8 1 13.8 1 23.5 14 37 14 37s13-13.5 13-23.2C27 6.8 21.2 1 14 1z" fill="${color}" stroke="#ffffff" stroke-width="2"/>` +
+    middle + `</svg>`;
+  return L.divIcon({ className: 'pin', html: svg, iconSize: [28, 38], iconAnchor: [14, 38], popupAnchor: [0, -34] });
+}
+
+// Map of every session that has a location. Sessions at (nearly) the same spot share one pin.
+// Click a pin, then "View session" to open a session.
+function sessionsMap(sessions) {
+  const located = sessions.filter((s) => s.location);
+  if (located.length === 0) return h('p', { class: 'meta' }, 'No sessions have a GPS position yet, so there is nothing to map.');
+
+  // Group sessions whose positions round to the same spot (4 decimals is about 11 m).
+  const groups = new Map();
+  for (const s of located) {
+    const key = `${s.location.lat.toFixed(4)},${s.location.lon.toFixed(4)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
+  }
+
+  const box = h('div', { class: 'map' });
+  const legend = h('p', { class: 'meta' },
+    'One pin per location, coloured by the loudest session there (Leq): ',
+    h('span', { class: 'swatch', style: `background:${levelColor(0)}` }), ' under 55 dB  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(60)}` }), ' 55 to 70 dB  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(80)}` }), ' 70 dB or more. A number on a pin means several sessions were recorded there. Click a pin to see them.');
+
+  setTimeout(() => {
+    const map = L.map(box);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    const latlngs = [];
+    for (const group of groups.values()) {
+      const first = group[0];
+      const ll = [first.location.lat, first.location.lon];
+      latlngs.push(ll);
+      const loudest = Math.max(...group.map((s) => s.summary.leq));
+
+      const popup = h('div', { class: 'session-popup' },
+        group.length > 1 ? h('strong', {}, `${group.length} sessions here`) : null,
+        group.map((s) => h('div', { class: 'session-popup-item' },
+          h('div', {}, h('strong', {}, new Date(s.started_at).toLocaleString())),
+          h('div', {}, `${s.device_id} · ${formatDuration(s.duration_s)}`),
+          h('div', {}, `Leq ${s.summary.leq.toFixed(1)} dB · Lmax ${s.summary.lmax.toFixed(1)} dB`),
+          h('a', { href: `#/session/${s.id}` }, 'View session →'))));
+
+      L.marker(ll, { icon: pinIcon(levelColor(loudest), group.length) })
+        .bindPopup(popup, { maxHeight: 260 })
+        .addTo(map);
+    }
+    map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
+  }, 0);
+
+  return h('div', {}, box, legend);
+}
+
 // ---------- pages ----------
 
 async function showList() {
@@ -290,7 +354,7 @@ async function showList() {
       h('td', {}, s.summary.lmax.toFixed(1)),
       h('td', {}, notes(s))));
 
-  show(h('table', {}, h('thead', {}, header), h('tbody', {}, rows)));
+   show(sessionsMap(sessions), h('table', {}, h('thead', {}, header), h('tbody', {}, rows)));
 }
 
 const RAW_ROWS_SHOWN = 30;
