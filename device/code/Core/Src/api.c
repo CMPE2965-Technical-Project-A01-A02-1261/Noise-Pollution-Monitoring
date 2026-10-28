@@ -4,7 +4,7 @@
 
 extern UART_HandleTypeDef huart1;
 
-static uint8_t frame_count;
+static uint8_t frame_count = 1;
 
 #define API_STATUS_QUEUE_SIZE 4u
 
@@ -31,6 +31,7 @@ static volatile API_Status status_queue[API_STATUS_QUEUE_SIZE];
 static volatile uint8_t status_queue_head;
 static volatile uint8_t status_queue_tail;
 static volatile uint8_t dropped_status_count;
+
 
 static bool API_FrameHasId(uint8_t frame_type)
 {
@@ -177,8 +178,33 @@ void API_RxBluetooth(const uint8_t *data, uint16_t length){
 	length --;
 	//status message received
 	if (!strncmp(msg, "STATUS", length)){
-		printf("yay");
+		StatusResponse();
 	}
+}
+
+bool SendBLE(const uint8_t *msg, uint8_t msg_length){
+	if (msg_length > UINT8_MAX){
+		return false;
+	}
+
+	uint8_t data[UINT8_MAX];
+	data[0] = 0x2D;
+	data[1] = frame_count;
+	data[2] = 0x01; //bluetooth
+	uint8_t data_length = (uint8_t)(3 + msg_length);
+	for (uint16_t i = 0; i < msg_length; i++)
+	{
+		data[i + 3] = msg[i];
+	}
+
+	uint8_t frame[UINT8_MAX + 4];
+	uint16_t frame_length = MakeFrame(frame, data_length, data);
+	return SendFrame(frame, frame_length);
+}
+
+void StatusResponse(void){
+	///get battery % from module
+
 }
 
 bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10])
@@ -188,10 +214,10 @@ bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10])
 	{
 		return false;
 	}
-
+	23u
 	uint8_t data[UINT8_MAX];
 	data[0] = 0x1F;
-	data[1] = 0x81;
+	data[1] = frame_count;
 	data[2] = 0x00;
 	for (uint8_t i = 0; i < 10; i++)
 	{
@@ -210,13 +236,9 @@ bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10])
 
 	uint8_t frame[UINT8_MAX + 4];
 	uint16_t frame_length = MakeFrame(frame, data_length, data);
-	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, frame, frame_length, HAL_MAX_DELAY);
-	if (status == HAL_OK)
-	{
-		frame_count++;
-		return true;
-	}
-	return false;
+
+	return SendFrame(frame, frame_length);
+
 }
 
 uint16_t MakeFrame(uint8_t *frame, uint8_t length, const uint8_t *data)
@@ -234,4 +256,16 @@ uint16_t MakeFrame(uint8_t *frame, uint8_t length, const uint8_t *data)
 
 	// FIX: Parentheses are mandatory here to prevent casting order bugs
 	return (uint16_t)(length + 4);
+}
+
+bool SendFrame (const uint8_t *frame, uint16_t frame_length){
+	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, frame, frame_length, HAL_MAX_DELAY);
+		if (status == HAL_OK)
+		{
+			frame_count++;
+			if (frame_count == 0)
+				frame_count = 1;
+			return true;
+		}
+		return false;
 }
