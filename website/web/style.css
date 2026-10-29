@@ -191,3 +191,9 @@ svg.chart .hover-dot {
 
 .session-popup-item { margin-top: 8px; padding-top: 8px; border-top: 1px solid #dfe3ea; }
 .session-popup-item:first-of-type { margin-top: 4px; padding-top: 0; border-top: none; }
+
+.session-id { display: block; font-size: 1.3rem; font-weight: 800; line-height: 1.15; }
+.session-when { display: block; color: #5d6877; font-size: 0.85rem; }
+
+.loc-main { display: block; font-size: 1.1rem; font-weight: 500; line-height: 1.2; }
+.loc-sub { display: block; color: #5d6877; font-size: 0.85rem; }
