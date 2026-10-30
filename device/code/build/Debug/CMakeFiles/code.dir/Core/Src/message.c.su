@@ -1,0 +1,6 @@
+/home/sadie/capstone/device/code/Core/Src/message.c:10:6:HandleAPI	16	static
+/home/sadie/capstone/device/code/Core/Src/message.c:25:6:ReadBluetooth	24	static
+/home/sadie/capstone/device/code/Core/Src/message.c:40:6:SendBLE	288	static
+/home/sadie/capstone/device/code/Core/Src/message.c:58:6:StatusResponse	24	static
+/home/sadie/capstone/device/code/Core/Src/message.c:71:6:SendATCommand	32	static
+/home/sadie/capstone/device/code/Core/Src/message.c:81:6:SendSMS	296	static

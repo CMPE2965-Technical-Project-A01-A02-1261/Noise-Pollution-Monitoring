@@ -566,3 +566,17 @@
 {"_e":"metro:client_log","_t":1792775374461,"level":"log","data":["Received XBee BLE API frame:","{\"salt\": [150, 114, 144, 222], \"serverEphemeral\": [211, 181, 148, 156, 155, 177, 108, 78, 79, 16, 249, 199, 147, 234, 228, 91, 183, 33, 45, 147, 236, 33, 4, 243, 52, 9, 196, 63, 169, 66, 9, 214, 109, 62, 64, 40, 130, 48, 65, 74, 207, 172, 222, 174, 33, 219, 134, 234, 136, 33, 194, 204, 254, 81, 236, 42, 23, 131, 69, 145, 13, 227, 141, 103, 209, 39, 109, 212, 137, 26, 1, 13, 135, 60, 125, 52, 107, 82, 56, 168, 252, 121, 227, 159, 99, 86, 35, 253, 197, 195, 220, 45, 163, 120, 158, 186, 166, 72, 7, 190, 40, 55, 231, 148, 116, 189, 120, 15, 124, 23, 51, 50, 233, 150, 203, 237, 124, 83, 29, 181, 34, 194, 234, 5, 141, 88, 245, 243], \"step\": 2, \"type\": 172}"]}
 {"_e":"metro:client_log","_t":1792775375286,"level":"log","data":["Received XBee BLE API frame:","{\"rxNonce\": [227, 45, 246, 218, 32, 128, 78, 232, 44, 124, 71, 172], \"serverSessionProof\": [228, 45, 69, 140, 15, 192, 144, 204, 64, 236, 56, 158, 242, 151, 89, 132, 249, 163, 204, 206, 170, 13, 95, 116, 46, 74, 228, 110, 255, 243, 242, 108], \"step\": 4, \"txNonce\": [167, 52, 14, 73, 221, 51, 228, 235, 219, 11, 243, 102], \"type\": 172}"]}
 {"_e":"metro:client_log","_t":1792775380925,"level":"log","data":["Sent encrypted XBee BLE API frame:","1"]}
+{"_e":"root:init","_t":1793381845965,"format":"v0-jsonl","version":"57.0.32"}
+{"_e":"env:mode","_t":1793381845966,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1793381845967,"mode":"development","files":[],"env":{}}
+{"_e":"devserver:start","_t":1793381846288,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../src/app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1793381846475,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1793381846622,"plugins":[]}
+{"_e":"metro:instantiate","_t":1793381847316,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"root:init","_t":1793382210835,"format":"v0-jsonl","version":"57.0.32"}
+{"_e":"env:mode","_t":1793382210835,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1793382210836,"mode":"development","files":[],"env":{}}
+{"_e":"devserver:start","_t":1793382211051,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../src/app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1793382211185,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1793382211291,"plugins":[]}
+{"_e":"metro:instantiate","_t":1793382211901,"atlas":false,"workers":6,"host":"::","port":8081}

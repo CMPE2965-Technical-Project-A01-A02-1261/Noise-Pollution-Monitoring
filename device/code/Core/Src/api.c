@@ -58,6 +58,17 @@ static void API_QueueFrame(void)
 	status_queue_head = next_head;
 }
 
+static void API_PublishUrgentStatus(void)
+{
+	api_status.frame_type = rx_frame_type;
+	api_status.frame_id = rx_frame_id;
+	api_status.data_length = rx_payload_length;
+	for (uint16_t i = 0; i < rx_payload_length; i++)
+	{
+		api_status.data[i] = rx_data[i];
+	}
+}
+
 void API_ResetParser(void)
 {
 	rx_state = API_RX_WAIT_START;
@@ -139,6 +150,8 @@ void API_ProcessByte(uint8_t byte)
 			if (!rx_payload_too_large)
 			{
 				API_QueueFrame();
+				API_PublishUrgentStatus();
+				__HAL_GPIO_EXTI_GENERATE_SWIT(GPIO_PIN_15);
 			}
 		}
 		API_ResetParser();
@@ -146,7 +159,7 @@ void API_ProcessByte(uint8_t byte)
 	}
 }
 
-bool API_ReadStatus(API_Status *status)
+bool API_ReadStatus(volatile API_Status *status)
 {
 	if (status == NULL || status_queue_tail == status_queue_head)
 	{
@@ -169,73 +182,19 @@ uint8_t API_GetDroppedStatusCount(void)
 	return dropped_status_count;
 }
 
-void API_RxBluetooth(const uint8_t *data, uint16_t length){
-	if (data[0] != 1){
-		return; //not from bluetooth on xbee
-	}
-	//extract msg from rest of data array
-	char *msg = (char *)(data+1);
-	length --;
-	//status message received
-	if (!strncmp(msg, "STATUS", length)){
-		StatusResponse();
-	}
-}
-
-bool SendBLE(const uint8_t *msg, uint8_t msg_length){
-	if (msg_length > UINT8_MAX){
-		return false;
-	}
-
-	uint8_t data[UINT8_MAX];
-	data[0] = 0x2D;
-	data[1] = frame_count;
-	data[2] = 0x01; //bluetooth
-	uint8_t data_length = (uint8_t)(3 + msg_length);
-	for (uint16_t i = 0; i < msg_length; i++)
-	{
-		data[i + 3] = msg[i];
-	}
-
-	uint8_t frame[UINT8_MAX + 4];
-	uint16_t frame_length = MakeFrame(frame, data_length, data);
-	return SendFrame(frame, frame_length);
-}
-
-void StatusResponse(void){
-	///get battery % from module
-
-}
-
-bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10])
+uint8_t API_GetNextFrameId(void)
 {
-	if (number == NULL || (msg_length > 0 && msg == NULL) ||
-	    msg_length > UINT8_MAX - 23)
-	{
-		return false;
-	}
-	23u
-	uint8_t data[UINT8_MAX];
-	data[0] = 0x1F;
-	data[1] = frame_count;
-	data[2] = 0x00;
-	for (uint8_t i = 0; i < 10; i++)
-	{
-		data[i + 3] = (uint8_t)number[i];
-	}
-	for (uint8_t i = 13; i < 23; i++)
-	{
-		data[i] = 0;
-	}
+	return frame_count;
+}
 
-	uint8_t data_length = (uint8_t)(23u + msg_length);
-	for (uint16_t i = 0; i < msg_length; i++)
-	{
-		data[i + 23] = msg[i];
-	}
+
+
+
+
+bool Frame(const uint8_t *data, uint8_t length){
 
 	uint8_t frame[UINT8_MAX + 4];
-	uint16_t frame_length = MakeFrame(frame, data_length, data);
+	uint16_t frame_length = MakeFrame(frame, length, data);
 
 	return SendFrame(frame, frame_length);
 
