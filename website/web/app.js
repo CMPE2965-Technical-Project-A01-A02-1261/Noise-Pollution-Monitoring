@@ -2,18 +2,6 @@
 
 const app = document.getElementById('app');
 
-// ---------- data (the only part that changes when the server exists) ----------
-
-// async function loadSessions() {
-//   return SAMPLE_SESSIONS;
-// }
-
-// async function loadSession(id) {
-//   const s = SAMPLE_SESSIONS.find((x) => x.id === id);
-//   if (!s) throw new Error('session not found');
-//   return { ...s, readings: sampleReadings(s) };
-// }
-
 async function loadSessions() {
   const res = await fetch('api/sessions.php');
   if (!res.ok) throw new Error(`server answered ${res.status}`);
@@ -315,22 +303,80 @@ function sessionsMap(sessions) {
       latlngs.push(ll);
       const loudest = Math.max(...group.map((s) => s.summary.leq));
 
-      const popup = h('div', { class: 'session-popup' },
-        group.length > 1 ? h('strong', {}, `${group.length} sessions here`) : null,
-        group.map((s) => h('div', { class: 'session-popup-item' },
-          h('div', {}, h('strong', {}, new Date(s.started_at).toLocaleString())),
-          h('div', {}, `${s.device_id} · ${formatDuration(s.duration_s)}`),
-          h('div', {}, `Leq ${s.summary.leq.toFixed(1)} dB · Lmax ${s.summary.lmax.toFixed(1)} dB`),
-          h('a', { href: `#/session/${s.id}` }, 'View session →'))));
+      // Built when the popup opens, so it can use the place name once the table has looked it up.
+      const makePopup = () => {
+        const place = cachedPlace(first.location.lat, first.location.lon);
+        return h('div', { class: 'session-popup' },
+          place ? h('strong', {}, place) : null,
+          group.length > 1 ? h('div', {}, `${group.length} sessions here`) : null,
+          group.map((s) => h('div', { class: 'session-popup-item' },
+            h('div', {}, h('strong', {}, new Date(s.started_at).toLocaleString())),
+            h('div', {}, `${s.device_id} · ${formatDuration(s.duration_s)}`),
+            h('div', {}, `Leq ${s.summary.leq.toFixed(1)} dB · Lmax ${s.summary.lmax.toFixed(1)} dB`),
+            h('a', { href: `#/session/${s.id}` }, 'View session →'))));
+      };
 
       L.marker(ll, { icon: pinIcon(levelColor(loudest), group.length) })
-        .bindPopup(popup, { maxHeight: 260 })
+        .bindPopup(makePopup, { maxHeight: 260 })
         .addTo(map);
     }
     map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
   }, 0);
 
   return h('div', {}, box, legend);
+}
+
+// ---------- place names (reverse geocoding with OpenStreetMap Nominatim) ----------
+
+// Turns coordinates into a short place name such as "Kingsway, Edmonton".
+// Answers are cached in the browser, so each spot is looked up once. Returns null if it can't be found.
+async function placeName(lat, lon) {
+  const key = `place:${lat.toFixed(4)},${lon.toFixed(4)}`;
+  try { const saved = localStorage.getItem(key); if (saved) return saved; } catch (e) { /* storage unavailable */ }
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&addressdetails=1&lat=${lat}&lon=${lon}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const a = data.address || {};
+    const spot = data.name || a.road || a.neighbourhood || a.suburb;
+    const city = a.city || a.town || a.village || a.municipality;
+    const name = [spot, city].filter((p, i, all) => p && all.indexOf(p) === i).join(', ');
+    if (!name) return null;
+    try { localStorage.setItem(key, name); } catch (e) { /* storage unavailable */ }
+    return name;
+  } catch (e) {
+    return null;
+  }
+}
+
+// The cached place name for a spot, or null. Never calls the network, so it is safe to use anywhere.
+function cachedPlace(lat, lon) {
+  try { return localStorage.getItem(`place:${lat.toFixed(4)},${lon.toFixed(4)}`); } catch (e) { return null; }
+}
+
+// Fills in the place names in the table, one lookup at a time (Nominatim allows 1 per second).
+async function fillPlaceNames() {
+  const spots = new Map();
+  for (const el of document.querySelectorAll('.loc-sub[data-lat]')) {
+    const key = `${el.dataset.lat},${el.dataset.lon}`;
+    if (!spots.has(key)) spots.set(key, []);
+    spots.get(key).push(el);
+  }
+  for (const els of spots.values()) {
+    const lat = Number(els[0].dataset.lat);
+    const lon = Number(els[0].dataset.lon);
+    const cached = (() => { try { return localStorage.getItem(`place:${lat.toFixed(4)},${lon.toFixed(4)}`); } catch (e) { return null; } })();
+    const name = await placeName(lat, lon);
+    if (name) {
+      for (const el of els) {
+        el.previousElementSibling.textContent = name;                    // big line: the place name
+        el.textContent = formatLocation({ lat: Number(el.dataset.lat), lon: Number(el.dataset.lon) });   // small line: coordinates
+      }
+    }
+    if (!cached) await new Promise((r) => setTimeout(r, 1100));   // be polite to the free service
+  }
 }
 
 // ---------- pages ----------
@@ -340,21 +386,26 @@ async function showList() {
   document.title = 'Noise Monitor';
 
   const header = h('tr', {},
-    h('th', {}, 'Started'), h('th', {}, 'Device'), h('th', {}, 'Duration'),
+    h('th', {}, 'Session'), h('th', {}, 'Duration'),
     h('th', {}, 'Location'), h('th', {}, 'Leq (dB)'), h('th', {}, 'Lmax (dB)'),
     h('th', {}, 'Notes'));
 
   const rows = sessions.map((s) =>
     h('tr', {},
-      h('td', {}, h('a', { href: `#/session/${s.id}` }, new Date(s.started_at).toLocaleString())),
-      h('td', {}, s.device_id),
+      h('td', { class: 'session-cell' },
+        h('a', { href: `#/session/${s.id}`, class: 'session-id' }, `#${s.id}`),
+        h('span', { class: 'session-when' },
+          `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`)),
       h('td', {}, formatDuration(s.duration_s)),
-      h('td', {}, formatLocation(s.location)),
+        h('td', { class: 'location-cell' },
+        h('span', { class: 'loc-main' }, formatLocation(s.location)),
+        s.location ? h('span', { class: 'loc-sub', 'data-lat': s.location.lat, 'data-lon': s.location.lon }) : null),
       h('td', {}, s.summary.leq.toFixed(1)),
       h('td', {}, s.summary.lmax.toFixed(1)),
       h('td', {}, notes(s))));
 
-   show(sessionsMap(sessions), h('table', {}, h('thead', {}, header), h('tbody', {}, rows)));
+  show(sessionsMap(sessions), h('table', {}, h('thead', {}, header), h('tbody', {}, rows)));
+  fillPlaceNames();
 }
 
 const RAW_ROWS_SHOWN = 30;
@@ -377,9 +428,9 @@ async function showSession(id) {
   show(
     h('p', {}, h('a', { href: '#/' }, '← All sessions')),
     h('h1', {}, `Session ${s.id}`),
-    h('p', { class: 'meta' },
-      `${s.device_id} · ${new Date(s.started_at).toLocaleString()} · ${formatDuration(s.duration_s)} · ${formatLocation(s.location)}`),
-
+        h('p', { class: 'meta' },
+      `${s.device_id} · ${new Date(s.started_at).toLocaleString()} · ${formatDuration(s.duration_s)} · `,
+      h('span', { id: 'session-where', 'data-session': s.id }, formatLocation(s.location))),
     warnings(s).map((w) => h('div', { class: 'warning' }, w)),
 
     h('div', { class: 'stats' },
@@ -405,7 +456,16 @@ async function showSession(id) {
     h('table', {},
       h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB'), h('th', {}, 'Mic maxed out'))),
       h('tbody', {}, rawRows))
-  );
+    );
+      // Add the place name to the header line once it is known.
+  if (s.location) {
+    placeName(s.location.lat, s.location.lon).then((name) => {
+      const where = document.getElementById('session-where');
+      if (name && where && where.dataset.session === String(s.id)) {
+        where.textContent = `${name} (${formatLocation(s.location)})`;
+      }
+    });
+  }
 }
 
 // ---------- routing: #/ is the list, #/session/3 is session 3 ----------
