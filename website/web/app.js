@@ -379,6 +379,65 @@ async function fillPlaceNames() {
   }
 }
 
+// ---------- deleting a session ----------
+
+// A "Delete this session" button that opens a small confirm panel. Deleting needs the admin key.
+function deleteControl(s) {
+  const openButton = h('button', { type: 'button', class: 'button danger-button' }, 'Delete this session.');
+  const keyInput = h('input', {
+    type: 'password', class: 'key-input', placeholder: 'Admin key', autocomplete: 'off', 'aria-label': 'Admin key',
+  });
+  try { keyInput.value = sessionStorage.getItem('adminKey') || ''; } catch (e) { /* storage unavailable */ }
+  const confirmButton = h('button', { type: 'button', class: 'button danger-button' }, `Delete session #${s.id}`);
+  const cancelButton = h('button', { type: 'button', class: 'button secondary' }, 'Cancel');
+  const message = h('p', { class: 'meta', role: 'status' });
+  const panel = h('div', { class: 'danger-panel' },
+    h('p', {}, `Delete session #${s.id} and its ${s.readings.length} readings? This cannot be undone.`),
+    keyInput, confirmButton, cancelButton, message);
+  panel.hidden = true;
+
+  openButton.addEventListener('click', () => {
+    panel.hidden = false;
+    openButton.hidden = true;
+    keyInput.focus();
+  });
+  cancelButton.addEventListener('click', () => {
+    panel.hidden = true;
+    openButton.hidden = false;
+    message.textContent = '';
+  });
+  confirmButton.addEventListener('click', async () => {
+    const key = keyInput.value.trim();
+    if (!key) { message.textContent = 'Enter the admin key to delete.'; return; }
+    confirmButton.disabled = true;
+    message.textContent = 'Deleting…';
+    try {
+      const res = await fetch('api/delete_session.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+        body: JSON.stringify({ id: s.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        try { sessionStorage.setItem('adminKey', key); } catch (e) { /* storage unavailable */ }
+        location.hash = '#/';                       // back to the list, which reloads without this session
+        return;
+      }
+      if (res.status === 401) {
+        try { sessionStorage.removeItem('adminKey'); } catch (e) { /* storage unavailable */ }
+        message.textContent = 'That admin key is not right.';
+      } else {
+        message.textContent = body.error || `The server answered ${res.status}.`;
+      }
+    } catch (e) {
+      message.textContent = 'Could not reach the server. Nothing was deleted.';
+    }
+    confirmButton.disabled = false;
+  });
+
+  return h('div', { class: 'danger' }, openButton, panel);
+}
+
 // ---------- pages ----------
 
 async function showList() {
@@ -455,9 +514,12 @@ async function showSession(id) {
     h('p', { class: 'meta' }, `First ${RAW_ROWS_SHOWN} of ${s.readings.length} readings.`),
     h('table', {},
       h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB'), h('th', {}, 'Mic maxed out'))),
-      h('tbody', {}, rawRows))
+      h('tbody', {}, rawRows))      ,
+
+    deleteControl(s)
     );
-      // Add the place name to the header line once it is known.
+
+  // Add the place name to the header line once it is known.
   if (s.location) {
     placeName(s.location.lat, s.location.lon).then((name) => {
       const where = document.getElementById('session-where');
