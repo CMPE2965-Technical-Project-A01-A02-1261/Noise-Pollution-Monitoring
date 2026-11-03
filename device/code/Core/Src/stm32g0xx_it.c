@@ -55,6 +55,8 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern I2C_HandleTypeDef hi2c1;
+extern DMA_HandleTypeDef hdma_spi1_rx;
 extern UART_HandleTypeDef huart1;
 /* USER CODE BEGIN EV */
 
@@ -150,10 +152,44 @@ void EXTI4_15_IRQHandler(void)
   /* USER CODE END EXTI4_15_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_6);
   HAL_GPIO_EXTI_IRQHandler(B1_Pin);
-  HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_15);
   /* USER CODE BEGIN EXTI4_15_IRQn 1 */
 
   /* USER CODE END EXTI4_15_IRQn 1 */
+}
+
+/**
+  * @brief This function handles DMA1 channel 1 interrupt.
+  */
+void DMA1_Channel1_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_spi1_rx);
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles I2C1 event global interrupt / I2C1 wake-up interrupt through EXTI line 23.
+  */
+void I2C1_IRQHandler(void)
+{
+  /* USER CODE BEGIN I2C1_IRQn 0 */
+
+  /* USER CODE END I2C1_IRQn 0 */
+  if (hi2c1.Instance->ISR & (I2C_FLAG_BERR | I2C_FLAG_ARLO | I2C_FLAG_OVR))
+  {
+    HAL_I2C_ER_IRQHandler(&hi2c1);
+  }
+  else
+  {
+    HAL_I2C_EV_IRQHandler(&hi2c1);
+  }
+  /* USER CODE BEGIN I2C1_IRQn 1 */
+
+  /* USER CODE END I2C1_IRQn 1 */
 }
 
 /**
