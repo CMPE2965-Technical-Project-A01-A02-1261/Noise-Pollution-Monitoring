@@ -187,13 +187,73 @@ svg.chart .hover-dot {
     vertical-align: middle; 
 }
 
-  .pin { background: none; border: none; }
+.pin { background: none; border: none; }
 
-.session-popup-item { margin-top: 8px; padding-top: 8px; border-top: 1px solid #dfe3ea; }
-.session-popup-item:first-of-type { margin-top: 4px; padding-top: 0; border-top: none; }
+.session-popup-item { 
+    margin-top: 8px; 
+    padding-top: 8px; 
+    border-top: 1px solid #dfe3ea; 
+}
 
-.session-id { display: block; font-size: 1.3rem; font-weight: 800; line-height: 1.15; }
-.session-when { display: block; color: #5d6877; font-size: 0.85rem; }
+.session-popup-item:first-of-type { 
+    margin-top: 4px; 
+    padding-top: 0; 
+    border-top: none; 
+}
 
-.loc-main { display: block; font-size: 1.1rem; font-weight: 500; line-height: 1.2; }
-.loc-sub { display: block; color: #5d6877; font-size: 0.85rem; }
+.session-id { 
+    display: block; 
+    font-size: 1.3rem; 
+    font-weight: 800; 
+    line-height: 1.15; 
+}
+
+.session-when { 
+    display: block; 
+    color: #5d6877;
+     font-size: 0.85rem; 
+    }
+
+.loc-main { 
+    display: block; 
+    font-size: 1.1rem; 
+    font-weight: 500; 
+    line-height: 1.2; 
+}
+
+.loc-sub { 
+    display: block; 
+    color: #5d6877; 
+    font-size: 0.85rem; 
+}
+
+.danger { 
+    margin-top: 40px; 
+    padding-top: 16px; 
+    border-top: 1px solid #dfe3ea; 
+}
+
+.danger-button { background: #c43a31; }
+
+.danger-button:hover { background: #a52f27; }
+
+.button.secondary { 
+    background: #fff; 
+    color: #1c2430; 
+    border: 1px solid #c8d2d1; 
+}
+
+.button.secondary:hover { background: #f1f5f5; }
+
+.danger-panel[hidden] { display: none; }
+
+.key-input { 
+    font: inherit; 
+    padding: 8px 10px; 
+    border: 1px solid #c8d2d1; 
+    border-radius: 3px; 
+    margin: 4px 8px 8px 0; 
+    min-width: 14rem; 
+}
+
+.danger-panel .button { margin-right: 8px; }

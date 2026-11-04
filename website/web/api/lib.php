@@ -171,3 +171,26 @@ function ingest(PDO $pdo, string $deviceId, array $readings): array {
     'sessions' => array_keys($touched),
   ];
 }
+
+// Deletes one session and all of its readings. Returns how many readings were removed,
+// or null when there is no session with that id.
+function delete_session(PDO $pdo, int $id): ?int {
+  $pdo->beginTransaction();
+  try {
+    $exists = $pdo->prepare('SELECT 1 FROM sessions WHERE id = ?');
+    $exists->execute([$id]);
+    if ($exists->fetchColumn() === false) {
+      $pdo->rollBack();
+      return null;
+    }
+    $readings = $pdo->prepare('DELETE FROM readings WHERE session_id = ?');
+    $readings->execute([$id]);
+    $removed = $readings->rowCount();
+    $pdo->prepare('DELETE FROM sessions WHERE id = ?')->execute([$id]);
+    $pdo->commit();
+    return $removed;
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    throw $e;
+  }
+}
