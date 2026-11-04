@@ -1,0 +1,6 @@
+/home/sadie/capstone/device/code/Core/Src/battery.cpp:12:17:bool Battery_Init(uint16_t)	16	static
+/home/sadie/capstone/device/code/Core/Src/battery.cpp:22:17:bool Battery_IsConnected()	8	static
+/home/sadie/capstone/device/code/Core/Src/battery.cpp:24:17:bool Battery_Read(Battery_Status*)	32	static
+/home/sadie/capstone/device/code/Core/Src/battery.cpp:47:21:uint16_t Battery_GetSOC()	8	static
+/home/sadie/capstone/device/code/Core/Src/battery.cpp:51:21:uint16_t Battery_GetVoltage()	8	static
+/home/sadie/capstone/device/code/Core/Src/battery.cpp:55:20:int16_t Battery_GetCurrent()	8	static

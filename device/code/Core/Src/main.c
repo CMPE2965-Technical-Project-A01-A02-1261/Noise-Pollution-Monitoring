@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "battery.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -30,6 +31,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+/* Battery design capacity written to the BQ27441 at boot (mAh).
+ * 0 keeps the gauge's current setting. */
+#define BATTERY_DESIGN_CAPACITY_MAH 3000
+/* How often the main loop refreshes battery_status (ms). */
+#define BATTERY_POLL_INTERVAL_MS 5000
 
 /* USER CODE END PD */
 
@@ -49,6 +55,7 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 static uint8_t api_rx_byte;
 volatile API_Status api_status;
+Battery_Status battery_status;
 
 /* USER CODE END PV */
 
@@ -66,11 +73,20 @@ static void MX_I2S1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-/* Notice the 'l' in hlpuart1 */
+/* printf() retargeting. LPUART1 (the debug UART) is not enabled in code.ioc,
+ * so output is discarded. Enable LPUART1 in CubeMX and define DEBUG_UART to
+ * send printf() output over it again. */
+#ifdef DEBUG_UART
 extern UART_HandleTypeDef hlpuart1;
+#endif
 
 int _write(int file, char *ptr, int len) {
+#ifdef DEBUG_UART
   HAL_UART_Transmit(&hlpuart1, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+#else
+  (void)file;
+  (void)ptr;
+#endif
   return len;
 }
 
@@ -114,6 +130,13 @@ int main(void)
     Error_Handler();
   }
 
+  /* BQ27441 fuel gauge on I2C1 (PB8 SCL / PB9 SDA). A missing gauge is not
+   * fatal; battery_status just stays zeroed. */
+  if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
+    Battery_Read(&battery_status);
+  }
+  uint32_t last_battery_poll = HAL_GetTick();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,6 +146,17 @@ int main(void)
     while (API_ReadStatus(&status)) {
     	HandleAPI(&status);
     }
+
+    if (Battery_IsConnected() &&
+        HAL_GetTick() - last_battery_poll >= BATTERY_POLL_INTERVAL_MS) {
+      last_battery_poll = HAL_GetTick();
+      Battery_Read(&battery_status);
+      StatusResponse();
+    }
+    else if (!Battery_IsConnected())
+    	  if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
+    	    Battery_Read(&battery_status);
+    	  }
 
 
     /* USER CODE END WHILE */

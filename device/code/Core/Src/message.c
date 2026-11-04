@@ -1,4 +1,5 @@
 #include "message.h"
+#include "battery.h"
 
 bool GetBatt = false;
 uint8_t Batt = 0;
@@ -57,14 +58,22 @@ bool SendBLE(const uint8_t *msg, uint8_t msg_length){
 
 void StatusResponse(void){
 
+
+	char msg[16];
+	uint8_t length;
+
+	//battery state of charge from the BQ27441 fuel gauge (0 if not found)
+	uint16_t batt = Battery_GetSOC();
+	if (batt > 100) batt = 100;
+	length = (uint8_t)snprintf(msg, sizeof(msg), "BATT: %%%u", (unsigned)batt);
+	SendBLE((const uint8_t *)msg, length);
 	//wait for command to be sent
 	while (!SendATCommand("AI"));
 	uint32_t starttime = HAL_GetTick();
 
 	while (!GetCell && (HAL_GetTick() - starttime) < 500);
-	char msg[7];
-	uint8_t length = sprintf(msg, "CELL: %d", Cell);
-	SendBLE(msg, length);
+	length = (uint8_t)snprintf(msg, sizeof(msg), "CELL: %u", (unsigned)Cell);
+	SendBLE((const uint8_t *)msg, length);
 }
 
 

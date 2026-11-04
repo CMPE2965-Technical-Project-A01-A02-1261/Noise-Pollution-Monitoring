@@ -1,0 +1,61 @@
+/home/sadie/capstone/device/code/Core/Arduino/Arduino.h:26:20:void delay(uint32_t)	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:29:1:BQ27441::BQ27441()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:34:6:bool BQ27441::begin()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:51:6:bool BQ27441::setCapacity(uint16_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:64:6:bool BQ27441::setDesignEnergy(uint16_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:77:6:bool BQ27441::setTerminateVoltage(uint16_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:94:6:bool BQ27441::setTaperRate(uint16_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:113:10:uint16_t BQ27441::voltage()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:119:9:int16_t BQ27441::current(current_measure)	24	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:139:10:uint16_t BQ27441::capacity(capacity_measure)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:176:9:int16_t BQ27441::power()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:182:10:uint16_t BQ27441::soc(soc_measure)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:199:9:uint8_t BQ27441::soh(soh_measure)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:212:10:uint16_t BQ27441::temperature(temp_measure)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:231:6:bool BQ27441::GPOUTPolarity()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:239:6:bool BQ27441::setGPOUTPolarity(bool)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:258:6:bool BQ27441::GPOUTFunction()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:266:6:bool BQ27441::setGPOUTFunction(gpout_function)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:287:9:uint8_t BQ27441::SOC1SetThreshold()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:293:9:uint8_t BQ27441::SOC1ClearThreshold()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:299:6:bool BQ27441::setSOC1Thresholds(uint8_t, uint8_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:308:9:uint8_t BQ27441::SOCFSetThreshold()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:314:9:uint8_t BQ27441::SOCFClearThreshold()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:320:6:bool BQ27441::setSOCFThresholds(uint8_t, uint8_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:329:6:bool BQ27441::socFlag()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:337:6:bool BQ27441::socfFlag()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:346:6:bool BQ27441::itporFlag()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:354:6:bool BQ27441::fcFlag()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:362:6:bool BQ27441::chgFlag()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:370:6:bool BQ27441::dsgFlag()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:378:9:uint8_t BQ27441::sociDelta()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:384:6:bool BQ27441::setSOCIDelta(uint8_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:391:6:bool BQ27441::pulseGPOUT()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:401:10:uint16_t BQ27441::deviceType()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:408:6:bool BQ27441::enterConfig(bool)	24	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:432:6:bool BQ27441::exitConfig(bool)	24	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:463:10:uint16_t BQ27441::flags()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:469:10:uint16_t BQ27441::status()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:477:6:bool BQ27441::sealed()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:484:6:bool BQ27441::seal()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:490:6:bool BQ27441::unseal()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:502:10:uint16_t BQ27441::opConfig()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:508:6:bool BQ27441::writeOpConfig(uint16_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:519:6:bool BQ27441::softReset()	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:525:10:uint16_t BQ27441::readWord(uint16_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:533:10:uint16_t BQ27441::readControlWord(uint16_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:551:6:bool BQ27441::executeControlWord(uint16_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:569:6:bool BQ27441::blockDataControl()	24	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:576:6:bool BQ27441::blockDataClass(uint8_t)	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:582:6:bool BQ27441::blockDataOffset(uint8_t)	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:588:9:uint8_t BQ27441::blockDataChecksum()	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:596:9:uint8_t BQ27441::readBlockData(uint8_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:605:6:bool BQ27441::writeBlockData(uint8_t, uint8_t)	24	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:613:9:uint8_t BQ27441::computeBlockChecksum()	56	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:629:6:bool BQ27441::writeBlockChecksum(uint8_t)	16	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:635:9:uint8_t BQ27441::readExtendedData(uint8_t, uint8_t)	32	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:660:6:bool BQ27441::writeExtendedData(uint8_t, uint8_t, uint8_t*, uint8_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:698:9:int16_t BQ27441::i2cReadBytes(uint8_t, uint8_t*, uint8_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:716:10:uint16_t BQ27441::i2cWriteBytes(uint8_t, uint8_t*, uint8_t)	40	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:729:13:void __static_initialization_and_destruction_0()	8	static
+/home/sadie/capstone/device/code/SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp:729:13:cpp)	8	static

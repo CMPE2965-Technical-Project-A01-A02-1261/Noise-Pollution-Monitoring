@@ -1,0 +1,13 @@
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:12:1:TwoWire::TwoWire(I2C_HandleTypeDef*)	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:16:6:void TwoWire::begin()	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:23:6:void TwoWire::end()	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:25:6:void TwoWire::beginTransmission(uint16_t)	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:31:9:uint8_t TwoWire::endTransmission(bool)	48	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:58:8:size_t TwoWire::requestFrom(uint16_t, size_t, bool)	40	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:79:8:size_t TwoWire::write(uint8_t)	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:88:8:size_t TwoWire::write(const uint8_t*, size_t)	32	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:96:5:int TwoWire::available()	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:98:5:int TwoWire::read()	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:105:5:int TwoWire::peek()	16	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:110:1:void __static_initialization_and_destruction_0()	8	static
+/home/sadie/capstone/device/code/Core/Arduino/Wire.cpp:110:1:cpp)	8	static
