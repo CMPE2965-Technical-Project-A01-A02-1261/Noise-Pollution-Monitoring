@@ -4,7 +4,7 @@
 
 extern UART_HandleTypeDef huart1;
 
-static uint8_t frame_count;
+static uint8_t frame_count = 1;
 
 #define API_STATUS_QUEUE_SIZE 4u
 
@@ -32,6 +32,7 @@ static volatile uint8_t status_queue_head;
 static volatile uint8_t status_queue_tail;
 static volatile uint8_t dropped_status_count;
 
+
 static bool API_FrameHasId(uint8_t frame_type)
 {
 	return frame_type == 0x88 || frame_type == 0x89 ||
@@ -55,6 +56,17 @@ static void API_QueueFrame(void)
 		status_queue[status_queue_head].data[i] = rx_data[i];
 	}
 	status_queue_head = next_head;
+}
+
+static void API_PublishUrgentStatus(void)
+{
+	api_status.frame_type = rx_frame_type;
+	api_status.frame_id = rx_frame_id;
+	api_status.data_length = rx_payload_length;
+	for (uint16_t i = 0; i < rx_payload_length; i++)
+	{
+		api_status.data[i] = rx_data[i];
+	}
 }
 
 void API_ResetParser(void)
@@ -138,6 +150,8 @@ void API_ProcessByte(uint8_t byte)
 			if (!rx_payload_too_large)
 			{
 				API_QueueFrame();
+				API_PublishUrgentStatus();
+				__HAL_GPIO_EXTI_GENERATE_SWIT(GPIO_PIN_15);
 			}
 		}
 		API_ResetParser();
@@ -145,7 +159,7 @@ void API_ProcessByte(uint8_t byte)
 	}
 }
 
-bool API_ReadStatus(API_Status *status)
+bool API_ReadStatus(volatile API_Status *status)
 {
 	if (status == NULL || status_queue_tail == status_queue_head)
 	{
@@ -168,55 +182,22 @@ uint8_t API_GetDroppedStatusCount(void)
 	return dropped_status_count;
 }
 
-void API_RxBluetooth(const uint8_t *data, uint16_t length){
-	if (data[0] != 1){
-		return; //not from bluetooth on xbee
-	}
-	//extract msg from rest of data array
-	char *msg = (char *)(data+1);
-	length --;
-	//status message received
-	if (!strncmp(msg, "STATUS", length)){
-		printf("yay");
-	}
+uint8_t API_GetNextFrameId(void)
+{
+	return frame_count;
 }
 
-bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10])
-{
-	if (number == NULL || (msg_length > 0 && msg == NULL) ||
-	    msg_length > UINT8_MAX - 23)
-	{
-		return false;
-	}
 
-	uint8_t data[UINT8_MAX];
-	data[0] = 0x1F;
-	data[1] = 0x81;
-	data[2] = 0x00;
-	for (uint8_t i = 0; i < 10; i++)
-	{
-		data[i + 3] = (uint8_t)number[i];
-	}
-	for (uint8_t i = 13; i < 23; i++)
-	{
-		data[i] = 0;
-	}
 
-	uint8_t data_length = (uint8_t)(23u + msg_length);
-	for (uint16_t i = 0; i < msg_length; i++)
-	{
-		data[i + 23] = msg[i];
-	}
+
+
+bool Frame(const uint8_t *data, uint8_t length){
 
 	uint8_t frame[UINT8_MAX + 4];
-	uint16_t frame_length = MakeFrame(frame, data_length, data);
-	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, frame, frame_length, HAL_MAX_DELAY);
-	if (status == HAL_OK)
-	{
-		frame_count++;
-		return true;
-	}
-	return false;
+	uint16_t frame_length = MakeFrame(frame, length, data);
+
+	return SendFrame(frame, frame_length);
+
 }
 
 uint16_t MakeFrame(uint8_t *frame, uint8_t length, const uint8_t *data)
@@ -234,4 +215,16 @@ uint16_t MakeFrame(uint8_t *frame, uint8_t length, const uint8_t *data)
 
 	// FIX: Parentheses are mandatory here to prevent casting order bugs
 	return (uint16_t)(length + 4);
+}
+
+bool SendFrame (const uint8_t *frame, uint16_t frame_length){
+	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, frame, frame_length, HAL_MAX_DELAY);
+		if (status == HAL_OK)
+		{
+			frame_count++;
+			if (frame_count == 0)
+				frame_count = 1;
+			return true;
+		}
+		return false;
 }

@@ -2,18 +2,6 @@
 
 const app = document.getElementById('app');
 
-// ---------- data (the only part that changes when the server exists) ----------
-
-// async function loadSessions() {
-//   return SAMPLE_SESSIONS;
-// }
-
-// async function loadSession(id) {
-//   const s = SAMPLE_SESSIONS.find((x) => x.id === id);
-//   if (!s) throw new Error('session not found');
-//   return { ...s, readings: sampleReadings(s) };
-// }
-
 async function loadSessions() {
   const res = await fetch('api/sessions.php');
   if (!res.ok) throw new Error(`server answered ${res.status}`);
@@ -230,11 +218,11 @@ function buildMap(session) {
       }).bindPopup(`${new Date(r.ts).toLocaleTimeString()}<br>${r.db.toFixed(1)} dB${r.clipped ? ' (mic maxed out)' : ''}`).addTo(map);
     }
     if (latlngs.length === 0) {
-        latlngs.push([session.location.lat, session.location.lon]);
-        L.marker(latlngs[0]).bindPopup(
-          `Session location<br>${session.location.lat.toFixed(5)}, ${session.location.lon.toFixed(5)}<br>` +
-          `Started ${new Date(session.started_at).toLocaleTimeString()}`
-        ).addTo(map).openPopup();
+    latlngs.push([session.location.lat, session.location.lon]);
+    L.marker(latlngs[0]).bindPopup(
+      `Session location<br>${session.location.lat.toFixed(5)}, ${session.location.lon.toFixed(5)}<br>` +
+      `Started ${new Date(session.started_at).toLocaleTimeString()}`
+    ).addTo(map).openPopup();
     }
     map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30], maxZoom: 18 });
   }, 0);
@@ -269,6 +257,187 @@ function minuteTable(readings) {
     h('tbody', {}, rows));
 }
 
+// A map pin (teardrop) in the given colour. With count > 1 the pin shows how many sessions it holds.
+function pinIcon(color, count) {
+  const middle = count > 1
+    ? `<circle cx="14" cy="14" r="8" fill="#ffffff"/><text x="14" y="18" text-anchor="middle" font-size="11" font-weight="700" font-family="Arial, sans-serif" fill="#1b2a38">${count}</text>`
+    : `<circle cx="14" cy="14" r="5" fill="#ffffff"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="38" viewBox="0 0 28 38">` +
+    `<path d="M14 1C6.8 1 1 6.8 1 13.8 1 23.5 14 37 14 37s13-13.5 13-23.2C27 6.8 21.2 1 14 1z" fill="${color}" stroke="#ffffff" stroke-width="2"/>` +
+    middle + `</svg>`;
+  return L.divIcon({ className: 'pin', html: svg, iconSize: [28, 38], iconAnchor: [14, 38], popupAnchor: [0, -34] });
+}
+
+// Map of every session that has a location. Sessions at (nearly) the same spot share one pin.
+// Click a pin, then "View session" to open a session.
+function sessionsMap(sessions) {
+  const located = sessions.filter((s) => s.location);
+  if (located.length === 0) return h('p', { class: 'meta' }, 'No sessions have a GPS position yet, so there is nothing to map.');
+
+  // Group sessions whose positions round to the same spot (4 decimals is about 11 m).
+  const groups = new Map();
+  for (const s of located) {
+    const key = `${s.location.lat.toFixed(4)},${s.location.lon.toFixed(4)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
+  }
+
+  const box = h('div', { class: 'map' });
+  const legend = h('p', { class: 'meta' },
+    'One pin per location, coloured by the loudest session there (Leq): ',
+    h('span', { class: 'swatch', style: `background:${levelColor(0)}` }), ' under 55 dB  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(60)}` }), ' 55 to 70 dB  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(80)}` }), ' 70 dB or more. A number on a pin means several sessions were recorded there. Click a pin to see them.');
+
+  setTimeout(() => {
+    const map = L.map(box);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    const latlngs = [];
+    for (const group of groups.values()) {
+      const first = group[0];
+      const ll = [first.location.lat, first.location.lon];
+      latlngs.push(ll);
+      const loudest = Math.max(...group.map((s) => s.summary.leq));
+
+      // Built when the popup opens, so it can use the place name once the table has looked it up.
+      const makePopup = () => {
+        const place = cachedPlace(first.location.lat, first.location.lon);
+        return h('div', { class: 'session-popup' },
+          place ? h('strong', {}, place) : null,
+          group.length > 1 ? h('div', {}, `${group.length} sessions here`) : null,
+          group.map((s) => h('div', { class: 'session-popup-item' },
+            h('div', {}, h('strong', {}, new Date(s.started_at).toLocaleString())),
+            h('div', {}, `${s.device_id} · ${formatDuration(s.duration_s)}`),
+            h('div', {}, `Leq ${s.summary.leq.toFixed(1)} dB · Lmax ${s.summary.lmax.toFixed(1)} dB`),
+            h('a', { href: `#/session/${s.id}` }, 'View session →'))));
+      };
+
+      L.marker(ll, { icon: pinIcon(levelColor(loudest), group.length) })
+        .bindPopup(makePopup, { maxHeight: 260 })
+        .addTo(map);
+    }
+    map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
+  }, 0);
+
+  return h('div', {}, box, legend);
+}
+
+// ---------- place names (reverse geocoding with OpenStreetMap Nominatim) ----------
+
+// Turns coordinates into a short place name such as "Kingsway, Edmonton".
+// Answers are cached in the browser, so each spot is looked up once. Returns null if it can't be found.
+async function placeName(lat, lon) {
+  const key = `place:${lat.toFixed(4)},${lon.toFixed(4)}`;
+  try { const saved = localStorage.getItem(key); if (saved) return saved; } catch (e) { /* storage unavailable */ }
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&addressdetails=1&lat=${lat}&lon=${lon}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const a = data.address || {};
+    const spot = data.name || a.road || a.neighbourhood || a.suburb;
+    const city = a.city || a.town || a.village || a.municipality;
+    const name = [spot, city].filter((p, i, all) => p && all.indexOf(p) === i).join(', ');
+    if (!name) return null;
+    try { localStorage.setItem(key, name); } catch (e) { /* storage unavailable */ }
+    return name;
+  } catch (e) {
+    return null;
+  }
+}
+
+// The cached place name for a spot, or null. Never calls the network, so it is safe to use anywhere.
+function cachedPlace(lat, lon) {
+  try { return localStorage.getItem(`place:${lat.toFixed(4)},${lon.toFixed(4)}`); } catch (e) { return null; }
+}
+
+// Fills in the place names in the table, one lookup at a time (Nominatim allows 1 per second).
+async function fillPlaceNames() {
+  const spots = new Map();
+  for (const el of document.querySelectorAll('.loc-sub[data-lat]')) {
+    const key = `${el.dataset.lat},${el.dataset.lon}`;
+    if (!spots.has(key)) spots.set(key, []);
+    spots.get(key).push(el);
+  }
+  for (const els of spots.values()) {
+    const lat = Number(els[0].dataset.lat);
+    const lon = Number(els[0].dataset.lon);
+    const cached = (() => { try { return localStorage.getItem(`place:${lat.toFixed(4)},${lon.toFixed(4)}`); } catch (e) { return null; } })();
+    const name = await placeName(lat, lon);
+    if (name) {
+      for (const el of els) {
+        el.previousElementSibling.textContent = name;                    // big line: the place name
+        el.textContent = formatLocation({ lat: Number(el.dataset.lat), lon: Number(el.dataset.lon) });   // small line: coordinates
+      }
+    }
+    if (!cached) await new Promise((r) => setTimeout(r, 1100));   // be polite to the free service
+  }
+}
+
+// ---------- deleting a session ----------
+
+// A "Delete this session" button that opens a small confirm panel. Deleting needs the admin key.
+function deleteControl(s) {
+  const openButton = h('button', { type: 'button', class: 'button danger-button' }, 'Delete this session.');
+  const keyInput = h('input', {
+    type: 'password', class: 'key-input', placeholder: 'Admin key', autocomplete: 'off', 'aria-label': 'Admin key',
+  });
+  try { keyInput.value = sessionStorage.getItem('adminKey') || ''; } catch (e) { /* storage unavailable */ }
+  const confirmButton = h('button', { type: 'button', class: 'button danger-button' }, `Delete session #${s.id}`);
+  const cancelButton = h('button', { type: 'button', class: 'button secondary' }, 'Cancel');
+  const message = h('p', { class: 'meta', role: 'status' });
+  const panel = h('div', { class: 'danger-panel' },
+    h('p', {}, `Delete session #${s.id} and its ${s.readings.length} readings? This cannot be undone.`),
+    keyInput, confirmButton, cancelButton, message);
+  panel.hidden = true;
+
+  openButton.addEventListener('click', () => {
+    panel.hidden = false;
+    openButton.hidden = true;
+    keyInput.focus();
+  });
+  cancelButton.addEventListener('click', () => {
+    panel.hidden = true;
+    openButton.hidden = false;
+    message.textContent = '';
+  });
+  confirmButton.addEventListener('click', async () => {
+    const key = keyInput.value.trim();
+    if (!key) { message.textContent = 'Enter the admin key to delete.'; return; }
+    confirmButton.disabled = true;
+    message.textContent = 'Deleting…';
+    try {
+      const res = await fetch('api/delete_session.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+        body: JSON.stringify({ id: s.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        try { sessionStorage.setItem('adminKey', key); } catch (e) { /* storage unavailable */ }
+        location.hash = '#/';                       // back to the list, which reloads without this session
+        return;
+      }
+      if (res.status === 401) {
+        try { sessionStorage.removeItem('adminKey'); } catch (e) { /* storage unavailable */ }
+        message.textContent = 'That admin key is not right.';
+      } else {
+        message.textContent = body.error || `The server answered ${res.status}.`;
+      }
+    } catch (e) {
+      message.textContent = 'Could not reach the server. Nothing was deleted.';
+    }
+    confirmButton.disabled = false;
+  });
+
+  return h('div', { class: 'danger' }, openButton, panel);
+}
+
 // ---------- pages ----------
 
 async function showList() {
@@ -276,21 +445,26 @@ async function showList() {
   document.title = 'Noise Monitor';
 
   const header = h('tr', {},
-    h('th', {}, 'Started'), h('th', {}, 'Device'), h('th', {}, 'Duration'),
+    h('th', {}, 'Session'), h('th', {}, 'Duration'),
     h('th', {}, 'Location'), h('th', {}, 'Leq (dB)'), h('th', {}, 'Lmax (dB)'),
     h('th', {}, 'Notes'));
 
   const rows = sessions.map((s) =>
     h('tr', {},
-      h('td', {}, h('a', { href: `#/session/${s.id}` }, new Date(s.started_at).toLocaleString())),
-      h('td', {}, s.device_id),
+      h('td', { class: 'session-cell' },
+        h('a', { href: `#/session/${s.id}`, class: 'session-id' }, `#${s.id}`),
+        h('span', { class: 'session-when' },
+          `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`)),
       h('td', {}, formatDuration(s.duration_s)),
-      h('td', {}, formatLocation(s.location)),
+        h('td', { class: 'location-cell' },
+        h('span', { class: 'loc-main' }, formatLocation(s.location)),
+        s.location ? h('span', { class: 'loc-sub', 'data-lat': s.location.lat, 'data-lon': s.location.lon }) : null),
       h('td', {}, s.summary.leq.toFixed(1)),
       h('td', {}, s.summary.lmax.toFixed(1)),
       h('td', {}, notes(s))));
 
-  show(h('table', {}, h('thead', {}, header), h('tbody', {}, rows)));
+  show(sessionsMap(sessions), h('table', {}, h('thead', {}, header), h('tbody', {}, rows)));
+  fillPlaceNames();
 }
 
 const RAW_ROWS_SHOWN = 30;
@@ -313,9 +487,9 @@ async function showSession(id) {
   show(
     h('p', {}, h('a', { href: '#/' }, '← All sessions')),
     h('h1', {}, `Session ${s.id}`),
-    h('p', { class: 'meta' },
-      `${s.device_id} · ${new Date(s.started_at).toLocaleString()} · ${formatDuration(s.duration_s)} · ${formatLocation(s.location)}`),
-
+        h('p', { class: 'meta' },
+      `${s.device_id} · ${new Date(s.started_at).toLocaleString()} · ${formatDuration(s.duration_s)} · `,
+      h('span', { id: 'session-where', 'data-session': s.id }, formatLocation(s.location))),
     warnings(s).map((w) => h('div', { class: 'warning' }, w)),
 
     h('div', { class: 'stats' },
@@ -340,8 +514,20 @@ async function showSession(id) {
     h('p', { class: 'meta' }, `First ${RAW_ROWS_SHOWN} of ${s.readings.length} readings.`),
     h('table', {},
       h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB'), h('th', {}, 'Mic maxed out'))),
-      h('tbody', {}, rawRows))
-  );
+      h('tbody', {}, rawRows))      ,
+
+    deleteControl(s)
+    );
+
+  // Add the place name to the header line once it is known.
+  if (s.location) {
+    placeName(s.location.lat, s.location.lon).then((name) => {
+      const where = document.getElementById('session-where');
+      if (name && where && where.dataset.session === String(s.id)) {
+        where.textContent = `${name} (${formatLocation(s.location)})`;
+      }
+    });
+  }
 }
 
 // ---------- routing: #/ is the list, #/session/3 is session 3 ----------
