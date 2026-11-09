@@ -18,9 +18,6 @@ volatile bool GNSSPending = false;
 int32_t GNSSAltitude_mm = 0;
 uint32_t GNSSLockTime = 0; /* seconds since 2000-01-01 00:00:00 */
 
-/* Bluetooth link RSSI in dBm (0 = unknown). */
-int8_t BlueRSSI = 0;
-
 /* Recording session state, used for the TIME status packet. */
 bool Recording = false;
 uint32_t RecordStartTick = 0;
@@ -41,7 +38,6 @@ float Longitude = 0.0f;
 
 static bool ParseDateTime(const char *str, DateTime_t *dt);
 static void HandleGNSS(const char *data, uint16_t length);
-static const char *BlueQuality(int8_t rssi);
 
 void HandleAPI(const API_Status *status){
     if (status->frame_type == 0x89 && status->data_length > 0) {
@@ -196,14 +192,6 @@ static bool ParseDateTime(const char *str, DateTime_t *dt){
 	return true;
 }
 
-/* Maps a Bluetooth RSSI (dBm) to the GREAT/GOOD/POOR scale in the API doc. */
-static const char *BlueQuality(int8_t rssi){
-	if (rssi == 0) return "GOOD"; //unknown, but the STATUS request got through
-	if (rssi >= -60) return "GREAT";
-	if (rssi >= -80) return "GOOD";
-	return "POOR";
-}
-
 
 
 bool SendBLE(const uint8_t *msg, uint8_t msg_length){
@@ -258,10 +246,6 @@ void StatusResponse(void){
 	//number of GNSS satellites providing a lock (0 if no fix)
 	length = (uint8_t)snprintf(msg, sizeof(msg), "GNSS %u",
 	                           GNSSFix ? (unsigned)GNSS : 0u);
-	SendBLE((const uint8_t *)msg, length);
-
-	//bluetooth signal quality
-	length = (uint8_t)snprintf(msg, sizeof(msg), "BLUE %s", BlueQuality(BlueRSSI));
 	SendBLE((const uint8_t *)msg, length);
 
 	//optional packets, ask the app for anything the device doesn't know yet

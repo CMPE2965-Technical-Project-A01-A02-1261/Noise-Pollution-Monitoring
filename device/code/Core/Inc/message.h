@@ -24,7 +24,6 @@ extern volatile bool GNSSPending;
 extern uint8_t GNSS;
 extern int32_t GNSSAltitude_mm;
 extern uint32_t GNSSLockTime;
-extern int8_t BlueRSSI;
 
 extern bool Recording;
 extern uint32_t RecordStartTick;
