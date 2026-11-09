@@ -17,8 +17,13 @@ typedef struct {
 extern volatile bool GetCell;
 extern volatile uint8_t Cell;
 
+#define GNSS_ONE_SHOT_START 0x00
+
 extern bool GNSSFix;
+extern volatile bool GNSSPending;
 extern uint8_t GNSS;
+extern int32_t GNSSAltitude_mm;
+extern uint32_t GNSSLockTime;
 extern int8_t BlueRSSI;
 
 extern bool Recording;
@@ -35,6 +40,7 @@ extern float Longitude;
 
 bool SendBLE(const uint8_t *msg, uint8_t msg_length);
 bool SendATCommand(const char * command);
+bool RequestGNSS(uint16_t timeout_s);
 bool SendCell(const uint8_t, uint8_t);
 bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10]);
 void ReadBluetooth(const uint8_t *data, uint16_t length);

@@ -36,6 +36,11 @@
 #define BATTERY_DESIGN_CAPACITY_MAH 3000
 /* How often the main loop refreshes battery_status (ms). */
 #define BATTERY_POLL_INTERVAL_MS 5000
+/* GNSS one shot requests. Cellular is unavailable while the XBee searches
+ * for a fix, so keep these infrequent. */
+#define GNSS_STARTUP_DELAY_MS 10000   /* let the XBee boot first */
+#define GNSS_POLL_INTERVAL_MS 600000  /* 10 minutes */
+#define GNSS_TIMEOUT_S 120
 
 /* USER CODE END PD */
 
@@ -136,6 +141,7 @@ int main(void)
     Battery_Read(&battery_status);
   }
   uint32_t last_battery_poll = HAL_GetTick();
+  uint32_t next_gnss_poll = HAL_GetTick() + GNSS_STARTUP_DELAY_MS;
 
   /* USER CODE END 2 */
 
@@ -157,6 +163,12 @@ int main(void)
     	  if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
     	    Battery_Read(&battery_status);
     	  }
+
+    if (!GNSSPending && (int32_t)(HAL_GetTick() - next_gnss_poll) >= 0) {
+      if (RequestGNSS(GNSS_TIMEOUT_S)) {
+        next_gnss_poll = HAL_GetTick() + GNSS_POLL_INTERVAL_MS;
+      }
+    }
 
 
     /* USER CODE END WHILE */

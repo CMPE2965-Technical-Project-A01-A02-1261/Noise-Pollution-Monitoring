@@ -36,7 +36,8 @@ static volatile uint8_t dropped_status_count;
 static bool API_FrameHasId(uint8_t frame_type)
 {
 	return frame_type == 0x88 || frame_type == 0x89 ||
-	       frame_type == 0x8B || frame_type == 0x97;
+	       frame_type == 0x8B || frame_type == 0x97 ||
+	       frame_type == 0xBD;
 }
 
 static void API_QueueFrame(void)

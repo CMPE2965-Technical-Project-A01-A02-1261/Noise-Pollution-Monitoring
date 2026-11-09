@@ -13,6 +13,10 @@ uint8_t GNSS = 0;
 /* GNSS fix state. GNSS holds the number of satellites in the fix; GNSSFix is
  * set by whatever reads the XBee's GNSS receiver once it has a position. */
 bool GNSSFix = false;
+/* True while a GNSS one shot request is outstanding on the XBee. */
+volatile bool GNSSPending = false;
+int32_t GNSSAltitude_mm = 0;
+uint32_t GNSSLockTime = 0; /* seconds since 2000-01-01 00:00:00 */
 
 /* Bluetooth link RSSI in dBm (0 = unknown). */
 int8_t BlueRSSI = 0;
@@ -36,6 +40,7 @@ float Latitude = 0.0f;
 float Longitude = 0.0f;
 
 static bool ParseDateTime(const char *str, DateTime_t *dt);
+static void HandleGNSS(const char *data, uint16_t length);
 static const char *BlueQuality(int8_t rssi);
 
 void HandleAPI(const API_Status *status){
@@ -50,6 +55,70 @@ void HandleAPI(const API_Status *status){
     else if (status->frame_type == 0xAD) {
       ReadBluetooth((const uint8_t *)status->data, status->data_length);
     }
+    //GNSS request response: type, status (0 = success)
+    else if (status->frame_type == 0xBD && status->data_length >= 2) {
+      if (status->data[0] == GNSS_ONE_SHOT_START && status->data[1] != 0) {
+        GNSSPending = false; //request rejected, no 0xBF will follow
+      }
+    }
+    //GNSS one shot result
+    else if (status->frame_type == 0xBF) {
+      HandleGNSS(status->data, status->data_length);
+    }
+}
+
+static int32_t ReadBE32(const char *p){
+	return (int32_t)(((uint32_t)(uint8_t)p[0] << 24) |
+	                 ((uint32_t)(uint8_t)p[1] << 16) |
+	                 ((uint32_t)(uint8_t)p[2] << 8) |
+	                 (uint32_t)(uint8_t)p[3]);
+}
+
+/* GNSS One Shot Response (0xBF) payload:
+ * status(1) lock time(4) latitude(4) longitude(4) altitude(4) satellites(1)
+ * all big endian, lat/lng in degrees * 10^7, altitude in mm. */
+static void HandleGNSS(const char *data, uint16_t length){
+	GNSSPending = false;
+	if (length < 18){
+		return;
+	}
+
+	uint8_t result = (uint8_t)data[0];
+	if (result == 0x00){ //valid
+		GNSSLockTime = (uint32_t)ReadBE32(data + 1);
+		Latitude = (float)ReadBE32(data + 5) / 10000000.0f;
+		Longitude = (float)ReadBE32(data + 9) / 10000000.0f;
+		GNSSAltitude_mm = ReadBE32(data + 13);
+		GNSS = (uint8_t)data[17];
+		LatSet = true;
+		LngSet = true;
+		GNSSFix = true;
+	}
+	else if (result == 0x01 || result == 0x02){ //invalid or timed out
+		GNSSFix = false;
+		GNSS = 0;
+	}
+	//0x03 canceled: keep the previous fix
+}
+
+/* Starts a GNSS one shot location request (frame 0x3D). The XBee switches
+ * from cellular to GNSS priority until it gets a fix or timeout_s expires,
+ * then reports the result in a 0xBF frame. Returns false if not sent. */
+bool RequestGNSS(uint16_t timeout_s){
+	if (GNSSPending){
+		return false;
+	}
+	uint8_t data[5];
+	data[0] = 0x3D;
+	data[1] = API_GetNextFrameId();
+	data[2] = GNSS_ONE_SHOT_START;
+	data[3] = (uint8_t)(timeout_s >> 8);
+	data[4] = (uint8_t)(timeout_s & 0xFF);
+	if (!Frame(data, sizeof(data))){
+		return false;
+	}
+	GNSSPending = true;
+	return true;
 }
 
 
