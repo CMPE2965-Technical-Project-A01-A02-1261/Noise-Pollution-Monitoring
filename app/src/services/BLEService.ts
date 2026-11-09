@@ -561,6 +561,26 @@ export async function connectToXBee(deviceId: string, password: string): Promise
     await connectAndAuthenticate(deviceId, password);
 }
 
+/**
+ * Reads the signal strength of the active XBee connection, measured by the
+ * phone. The XBee has no way to report its own BLE RSSI, so this is done
+ * app-side. Returns null if nothing is connected or the read fails.
+ */
+export async function readXBeeSignalStrength(): Promise<number | null> {
+    const session = activeSession;
+    if (!session) {
+        return null;
+    }
+
+    try {
+        const device = await session.device.readRSSI();
+        return typeof device.rssi === 'number' ? device.rssi : null;
+    } catch (error) {
+        console.error('Could not read XBee signal strength:', error);
+        return null;
+    }
+}
+
 export async function sendStatusToXBee(): Promise<void> {
     const session = activeSession;
     if (!session) {

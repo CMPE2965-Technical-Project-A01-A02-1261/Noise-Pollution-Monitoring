@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import Status from "../components/status";
 import { GetStatus } from "../services/GetStatus";
 import type { XBeeApiFrame, XBeeBluetoothDevice } from "../services/BLEService";
+
+const SIGNAL_POLL_INTERVAL_MS = 5000;
+
+/** GREAT/GOOD/POOR scale from the Bluetooth API doc, same thresholds as the firmware. */
+function bluetoothQuality(rssi: number): string {
+  if (rssi >= -60) return "GREAT";
+  if (rssi >= -80) return "GOOD";
+  return "POOR";
+}
 
 export default function Index() {
   const [devices, setDevices] = useState<XBeeBluetoothDevice[]>([]);
@@ -13,9 +23,39 @@ export default function Index() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [receivedFrames, setReceivedFrames] = useState<XBeeApiFrame[]>([]);
+  const [signalStrength, setSignalStrength] = useState<number | null>(null);
   const unsubscribeFromFrames = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => () => unsubscribeFromFrames.current?.(), []);
+
+  const refreshSignalStrength = async () => {
+    const { readXBeeSignalStrength } = await import("../services/BLEService");
+    setSignalStrength(await readXBeeSignalStrength());
+  };
+
+  // Keep the Bluetooth signal strength current while a device is connected.
+  useEffect(() => {
+    if (!connectedDevice) {
+      return;
+    }
+
+    let cancelled = false;
+    const poll = async () => {
+      const { readXBeeSignalStrength } = await import("../services/BLEService");
+      const rssi = await readXBeeSignalStrength();
+      if (!cancelled) {
+        setSignalStrength(rssi);
+      }
+    };
+
+    void poll();
+    const interval = setInterval(() => void poll(), SIGNAL_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      setSignalStrength(null);
+    };
+  }, [connectedDevice]);
 
   const scanForDevices = async () => {
     setIsScanning(true);
@@ -74,7 +114,7 @@ export default function Index() {
   const requestStatus = async () => {
     setIsSending(true);
     try {
-      await GetStatus();
+      await Promise.all([GetStatus(), refreshSignalStrength()]);
     } finally {
       setIsSending(false);
     }
@@ -84,7 +124,17 @@ export default function Index() {
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.heading}>Bluetooth connection</Text>
       {connectedDevice ? (
-        <Text style={styles.connectionStatus}>Connected to {connectedDevice.name}</Text>
+        <>
+          <Text style={styles.connectionStatus}>Connected to {connectedDevice.name}</Text>
+          <Status
+            title="BLUE"
+            data={
+              signalStrength === null
+                ? "Reading..."
+                : `${bluetoothQuality(signalStrength)} (${signalStrength} dBm)`
+            }
+          />
+        </>
       ) : (
         <Text style={styles.connectionStatus}>No device connected</Text>
       )}
