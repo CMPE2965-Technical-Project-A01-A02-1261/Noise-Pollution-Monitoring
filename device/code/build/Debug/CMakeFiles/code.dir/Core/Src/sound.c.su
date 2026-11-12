@@ -1,0 +1,15 @@
+/home/sadie/capstone/device/code/Core/Src/sound.c:134:17:ComputeSampleRate	40	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:149:15:BilinearPole	40	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:159:15:SectionPower	48	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:168:13:DesignFilter	120	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:215:13:ResetWindow	8	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:224:13:FinishWindow	16	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:244:23:ProcessHalf	56	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:283:13:StartCapture	16	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:304:6:Sound_Start	16	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:316:10:Sound_GetSampleRate	8	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:321:9:Sound_GetDroppedCount	8	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:328:6:Sound_Read	120	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:384:6:HAL_I2S_RxHalfCpltCallback	16	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:391:6:HAL_I2S_RxCpltCallback	16	static
+/home/sadie/capstone/device/code/Core/Src/sound.c:398:6:HAL_I2S_ErrorCallback	16	static

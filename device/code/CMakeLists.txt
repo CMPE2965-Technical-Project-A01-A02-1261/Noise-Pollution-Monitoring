@@ -50,6 +50,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/api.c
     Core/Src/message.c
+    Core/Src/sound.c
     Core/Src/battery.cpp
     Core/Arduino/Wire.cpp
     SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp

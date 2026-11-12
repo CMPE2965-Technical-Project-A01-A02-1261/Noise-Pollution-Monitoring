@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "battery.h"
+#include "sound.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,6 +62,8 @@ UART_HandleTypeDef huart1;
 static uint8_t api_rx_byte;
 volatile API_Status api_status;
 Battery_Status battery_status;
+/* Latest one second sound level from the microphone. */
+Sound_Reading sound_level;
 
 /* USER CODE END PV */
 
@@ -140,6 +143,10 @@ int main(void)
   if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
     Battery_Read(&battery_status);
   }
+  /* Microphone on I2S1 (PA5 CK / PA7 SD / PB0 WS), DMA to one second Leq.
+   * A failed start is retried by Sound_Read. */
+  Sound_Start(&hi2s1);
+
   uint32_t last_battery_poll = HAL_GetTick();
   uint32_t next_gnss_poll = HAL_GetTick() + GNSS_STARTUP_DELAY_MS;
 
@@ -151,6 +158,11 @@ int main(void)
     API_Status status;
     while (API_ReadStatus(&status)) {
     	HandleAPI(&status);
+    }
+
+    Sound_Reading reading;
+    while (Sound_Read(&reading)) {
+      sound_level = reading;
     }
 
     if (Battery_IsConnected() &&
@@ -289,10 +301,10 @@ static void MX_I2S1_Init(void)
   /* USER CODE END I2S1_Init 1 */
   hi2s1.Instance = SPI1;
   hi2s1.Init.Mode = I2S_MODE_MASTER_RX;
-  hi2s1.Init.Standard = I2S_STANDARD_PHILIPS;
+  hi2s1.Init.Standard = I2S_STANDARD_MSB;
   hi2s1.Init.DataFormat = I2S_DATAFORMAT_24B;
   hi2s1.Init.MCLKOutput = I2S_MCLKOUTPUT_DISABLE;
-  hi2s1.Init.AudioFreq = I2S_AUDIOFREQ_32K;
+  hi2s1.Init.AudioFreq = I2S_AUDIOFREQ_48K;
   hi2s1.Init.CPOL = I2S_CPOL_LOW;
   if (HAL_I2S_Init(&hi2s1) != HAL_OK)
   {
@@ -363,7 +375,7 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
