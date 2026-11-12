@@ -34,15 +34,16 @@ extern uint32_t DateTimeTick;
 
 extern bool LatSet;
 extern bool LngSet;
-extern float Latitude;
-extern float Longitude;
+/* Degrees * 10^7, as the XBee GNSS reports them (float loses ~1 m). */
+extern int32_t LatitudeE7;
+extern int32_t LongitudeE7;
 
 bool SendBLE(const uint8_t *msg, uint8_t msg_length);
 bool SendATCommand(const char * command);
 bool RequestGNSS(uint16_t timeout_s);
 bool SendCell(const uint8_t, uint8_t);
 bool SendSMS(const uint8_t *msg, uint8_t msg_length, const char number[10]);
-void ReadBluetooth(const uint8_t *data, uint16_t length);
+void ReadBluetooth(const uint8_t *data, uint16_t length, uint32_t tick);
 
 void HandleAPI(const API_Status *status);
 

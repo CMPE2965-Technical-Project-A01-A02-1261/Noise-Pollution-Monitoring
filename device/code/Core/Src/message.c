@@ -1,6 +1,9 @@
 #include "message.h"
 #include "battery.h"
+#include "clock.h"
+#include "uplink.h"
 
+#include <math.h>
 #include <stdlib.h>
 
 bool GetBatt = false;
@@ -22,9 +25,10 @@ uint32_t GNSSLockTime = 0; /* seconds since 2000-01-01 00:00:00 */
 bool Recording = false;
 uint32_t RecordStartTick = 0;
 
-/* Wall clock time received from the app ("DT YYYY-MM-DDTHH:MM:SS").
+/* Wall clock time (UTC) received from the app ("DT YYYY-MM-DDTHH:MM:SS").
  * DateTimeTick is the HAL tick at the moment it was received, so the current
- * time is DateTime + (HAL_GetTick() - DateTimeTick). */
+ * time is DateTime + (HAL_GetTick() - DateTimeTick). It also sets the Clock
+ * used to timestamp readings. */
 bool TimeSet = false;
 DateTime_t DateTime = {0};
 uint32_t DateTimeTick = 0;
@@ -33,11 +37,11 @@ uint32_t DateTimeTick = 0;
  * when the device has its own GNSS fix. */
 bool LatSet = false;
 bool LngSet = false;
-float Latitude = 0.0f;
-float Longitude = 0.0f;
+int32_t LatitudeE7 = 0;
+int32_t LongitudeE7 = 0;
 
 static bool ParseDateTime(const char *str, DateTime_t *dt);
-static void HandleGNSS(const char *data, uint16_t length);
+static void HandleGNSS(const char *data, uint16_t length, uint32_t tick);
 
 void HandleAPI(const API_Status *status){
     if (status->frame_type == 0x89 && status->data_length > 0) {
@@ -49,7 +53,7 @@ void HandleAPI(const API_Status *status){
              (uint8_t)status->data[0]);
     }
     else if (status->frame_type == 0xAD) {
-      ReadBluetooth((const uint8_t *)status->data, status->data_length);
+      ReadBluetooth((const uint8_t *)status->data, status->data_length, status->tick);
     }
     //GNSS request response: type, status (0 = success)
     else if (status->frame_type == 0xBD && status->data_length >= 2) {
@@ -59,7 +63,12 @@ void HandleAPI(const API_Status *status){
     }
     //GNSS one shot result
     else if (status->frame_type == 0xBF) {
-      HandleGNSS(status->data, status->data_length);
+      HandleGNSS(status->data, status->data_length, status->tick);
+    }
+    //socket frames for the server uplink, plus TX status for socket sends
+    if (status->frame_type == 0x89 || (status->frame_type >= 0xC0 &&
+                                       status->frame_type <= 0xCF)) {
+      Uplink_HandleFrame(status);
     }
 }
 
@@ -73,7 +82,7 @@ static int32_t ReadBE32(const char *p){
 /* GNSS One Shot Response (0xBF) payload:
  * status(1) lock time(4) latitude(4) longitude(4) altitude(4) satellites(1)
  * all big endian, lat/lng in degrees * 10^7, altitude in mm. */
-static void HandleGNSS(const char *data, uint16_t length){
+static void HandleGNSS(const char *data, uint16_t length, uint32_t tick){
 	GNSSPending = false;
 	if (length < 18){
 		return;
@@ -82,13 +91,16 @@ static void HandleGNSS(const char *data, uint16_t length){
 	uint8_t result = (uint8_t)data[0];
 	if (result == 0x00){ //valid
 		GNSSLockTime = (uint32_t)ReadBE32(data + 1);
-		Latitude = (float)ReadBE32(data + 5) / 10000000.0f;
-		Longitude = (float)ReadBE32(data + 9) / 10000000.0f;
+		LatitudeE7 = ReadBE32(data + 5);
+		LongitudeE7 = ReadBE32(data + 9);
 		GNSSAltitude_mm = ReadBE32(data + 13);
 		GNSS = (uint8_t)data[17];
 		LatSet = true;
 		LngSet = true;
 		GNSSFix = true;
+		//the fix is reported as soon as it is obtained, so the lock time
+		//is the time this frame arrived
+		Clock_Set((int64_t)GNSSLockTime + CLOCK_UNIX_2000, tick);
 	}
 	else if (result == 0x01 || result == 0x02){ //invalid or timed out
 		GNSSFix = false;
@@ -118,7 +130,7 @@ bool RequestGNSS(uint16_t timeout_s){
 }
 
 
-void ReadBluetooth(const uint8_t *data, uint16_t length){
+void ReadBluetooth(const uint8_t *data, uint16_t length, uint32_t tick){
 	if (data[0] != 1){
 		return; //not from bluetooth on xbee
 	}
@@ -144,17 +156,19 @@ void ReadBluetooth(const uint8_t *data, uint16_t length){
 		DateTime_t dt;
 		if (ParseDateTime(msg + 3, &dt)){
 			DateTime = dt;
-			DateTimeTick = HAL_GetTick();
+			DateTimeTick = tick;
 			TimeSet = true;
+			Clock_Set(Clock_FromCivil(dt.year, dt.month, dt.day,
+			                          dt.hour, dt.minute, dt.second), tick);
 		}
 	}
 	//latitude from app, disregarded if device has a GNSS fix
 	else if (!strncmp(msg, "LAT ", 4)){
 		if (!GNSSFix){
 			char *end;
-			float lat = strtof(msg + 4, &end);
-			if (end != msg + 4 && lat >= -90.0f && lat <= 90.0f){
-				Latitude = lat;
+			double lat = strtod(msg + 4, &end);
+			if (end != msg + 4 && lat >= -90.0 && lat <= 90.0){
+				LatitudeE7 = (int32_t)lround(lat * 1e7);
 				LatSet = true;
 			}
 		}
@@ -163,9 +177,9 @@ void ReadBluetooth(const uint8_t *data, uint16_t length){
 	else if (!strncmp(msg, "LNG ", 4)){
 		if (!GNSSFix){
 			char *end;
-			float lng = strtof(msg + 4, &end);
-			if (end != msg + 4 && lng >= -180.0f && lng <= 180.0f){
-				Longitude = lng;
+			double lng = strtod(msg + 4, &end);
+			if (end != msg + 4 && lng >= -180.0 && lng <= 180.0){
+				LongitudeE7 = (int32_t)lround(lng * 1e7);
 				LngSet = true;
 			}
 		}
@@ -249,7 +263,7 @@ void StatusResponse(void){
 	SendBLE((const uint8_t *)msg, length);
 
 	//optional packets, ask the app for anything the device doesn't know yet
-	if (!TimeSet){
+	if (!Clock_IsSet()){
 		length = (uint8_t)snprintf(msg, sizeof(msg), "REQUEST TIME");
 		SendBLE((const uint8_t *)msg, length);
 	}

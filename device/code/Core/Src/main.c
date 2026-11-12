@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "battery.h"
 #include "sound.h"
+#include "uplink.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -42,6 +43,9 @@
 #define GNSS_STARTUP_DELAY_MS 10000   /* let the XBee boot first */
 #define GNSS_POLL_INTERVAL_MS 600000  /* 10 minutes */
 #define GNSS_TIMEOUT_S 120
+/* Give up waiting for the XBee's GNSS result this long after its own
+ * timeout, so a lost response can't block GNSS and uploads forever. */
+#define GNSS_RESPONSE_GRACE_MS 30000
 
 /* USER CODE END PD */
 
@@ -149,13 +153,14 @@ int main(void)
 
   uint32_t last_battery_poll = HAL_GetTick();
   uint32_t next_gnss_poll = HAL_GetTick() + GNSS_STARTUP_DELAY_MS;
+  uint32_t gnss_request_tick = 0;
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1) {
-    API_Status status;
+    static API_Status status; /* 1.5 kB, kept off the stack */
     while (API_ReadStatus(&status)) {
     	HandleAPI(&status);
     }
@@ -163,7 +168,9 @@ int main(void)
     Sound_Reading reading;
     while (Sound_Read(&reading)) {
       sound_level = reading;
+      Uplink_AddReading(&reading);
     }
+    Uplink_Process();
 
     if (Battery_IsConnected() &&
         HAL_GetTick() - last_battery_poll >= BATTERY_POLL_INTERVAL_MS) {
@@ -176,10 +183,17 @@ int main(void)
     	    Battery_Read(&battery_status);
     	  }
 
-    if (!GNSSPending && (int32_t)(HAL_GetTick() - next_gnss_poll) >= 0) {
+    /* GNSS takes the XBee off cellular, so don't start it mid upload. */
+    if (!GNSSPending && Uplink_IsIdle() &&
+        (int32_t)(HAL_GetTick() - next_gnss_poll) >= 0) {
       if (RequestGNSS(GNSS_TIMEOUT_S)) {
-        next_gnss_poll = HAL_GetTick() + GNSS_POLL_INTERVAL_MS;
+        gnss_request_tick = HAL_GetTick();
+        next_gnss_poll = gnss_request_tick + GNSS_POLL_INTERVAL_MS;
       }
+    }
+    if (GNSSPending && HAL_GetTick() - gnss_request_tick >
+                       GNSS_TIMEOUT_S * 1000u + GNSS_RESPONSE_GRACE_MS) {
+      GNSSPending = false;
     }
 
 
@@ -425,7 +439,28 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-/* USER CODE BEGIN 4 */
+/* XBee UART: every received byte goes to the API frame parser. */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART1) {
+    API_ProcessByte(api_rx_byte);
+    if (HAL_UART_Receive_IT(&huart1, &api_rx_byte, 1) != HAL_OK) {
+      Error_Handler();
+    }
+  }
+}
+
+/* Line errors (framing/noise, e.g. while the XBee powers up) drop the frame
+ * in progress. For those the HAL keeps receiving; only overrun and timeout
+ * errors stop reception, so re-arm just in that case. */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART1) {
+    API_ResetParser();
+    if (huart->RxState == HAL_UART_STATE_READY) {
+      HAL_UART_Receive_IT(&huart1, &api_rx_byte, 1);
+    }
+  }
+}
+
 void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin != GPIO_PIN_15 || api_status.frame_type != 0x88 ||
 	    api_status.data_length < 4 || api_status.data[2] != 0)
