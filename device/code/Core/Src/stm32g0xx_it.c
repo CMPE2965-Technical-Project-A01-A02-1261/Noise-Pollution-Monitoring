@@ -153,6 +153,10 @@ void EXTI4_15_IRQHandler(void)
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_6);
   HAL_GPIO_EXTI_IRQHandler(B1_Pin);
   /* USER CODE BEGIN EXTI4_15_IRQn 1 */
+  /* PA15 is set up as EXTI in MX_GPIO_Init_2 (not in code.ioc), so CubeMX
+   * doesn't clear it here. Without this its pending flag is never cleared
+   * and the interrupt fires forever, starving the main loop. */
+  HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_15);
 
   /* USER CODE END EXTI4_15_IRQn 1 */
 }

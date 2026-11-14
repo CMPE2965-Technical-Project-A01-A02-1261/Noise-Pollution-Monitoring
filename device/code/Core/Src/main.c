@@ -24,6 +24,11 @@
 #include "battery.h"
 #include "sound.h"
 #include "uplink.h"
+#include "clock.h"
+#include "message.h"
+
+#include <stdlib.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,6 +51,16 @@
 /* Give up waiting for the XBee's GNSS result this long after its own
  * timeout, so a lost response can't block GNSS and uploads forever. */
 #define GNSS_RESPONSE_GRACE_MS 30000
+
+/* TESTING: skip GNSS and use a fixed position, so uploads can be tested
+ * without a fix. The clock is set from the build time of this file, so
+ * timestamps are off by however long it was between building and booting
+ * (the phone's "DT" message replaces it). Set to 0 to restore GNSS. */
+#define TEST_STATIC_POSITION 1
+#define TEST_LATITUDE_E7 537728000    /* 53.7728 */
+#define TEST_LONGITUDE_E7 -1133899000 /* -113.3899 */
+/* Build machine's offset from UTC in hours (__TIME__ is local time). */
+#define TEST_BUILD_UTC_OFFSET_H (-6)
 
 /* USER CODE END PD */
 
@@ -84,6 +99,29 @@ static void MX_I2S1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+#if TEST_STATIC_POSITION
+/* UTC seconds from __DATE__ ("Mmm dd yyyy") and __TIME__ ("hh:mm:ss"). */
+static int64_t BuildTimeUnix(void)
+{
+  static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+  const char *d = __DATE__;
+  const char *t = __TIME__;
+  unsigned month = 1;
+  for (unsigned i = 0; i < 12u; i++) {
+    if (strncmp(d, months + 3u * i, 3) == 0) {
+      month = i + 1u;
+    }
+  }
+  unsigned day = (d[4] == ' ' ? 0u : (unsigned)(d[4] - '0')) * 10u + (unsigned)(d[5] - '0');
+  int year = atoi(d + 7);
+  unsigned hour = (unsigned)atoi(t);
+  unsigned minute = (unsigned)atoi(t + 3);
+  unsigned second = (unsigned)atoi(t + 6);
+  return Clock_FromCivil(year, month, day, hour, minute, second) -
+         (int64_t)TEST_BUILD_UTC_OFFSET_H * 3600;
+}
+#endif
 
 /* printf() retargeting. LPUART1 (the debug UART) is not enabled in code.ioc,
  * so output is discarded. Enable LPUART1 in CubeMX and define DEBUG_UART to
@@ -152,8 +190,16 @@ int main(void)
   Sound_Start(&hi2s1);
 
   uint32_t last_battery_poll = HAL_GetTick();
+#if TEST_STATIC_POSITION
+  LatitudeE7 = TEST_LATITUDE_E7;
+  LongitudeE7 = TEST_LONGITUDE_E7;
+  LatSet = true;
+  LngSet = true;
+  Clock_Set(BuildTimeUnix(), HAL_GetTick());
+#else
   uint32_t next_gnss_poll = HAL_GetTick() + GNSS_STARTUP_DELAY_MS;
   uint32_t gnss_request_tick = 0;
+#endif
 
   /* USER CODE END 2 */
 
@@ -183,6 +229,7 @@ int main(void)
     	    Battery_Read(&battery_status);
     	  }
 
+#if !TEST_STATIC_POSITION
     /* GNSS takes the XBee off cellular, so don't start it mid upload. */
     if (!GNSSPending && Uplink_IsIdle() &&
         (int32_t)(HAL_GetTick() - next_gnss_poll) >= 0) {
@@ -195,6 +242,7 @@ int main(void)
                        GNSS_TIMEOUT_S * 1000u + GNSS_RESPONSE_GRACE_MS) {
       GNSSPending = false;
     }
+#endif
 
 
     /* USER CODE END WHILE */

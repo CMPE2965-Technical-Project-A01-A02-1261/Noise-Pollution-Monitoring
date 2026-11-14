@@ -33,7 +33,7 @@
 /* Readings held while waiting for a time or a connection: 30 minutes. */
 #define UPLINK_BUFFER_SIZE 1800u
 /* Readings per request. Also how far a backlog is worked off per request. */
-#define UPLINK_MAX_BATCH 60u
+#define UPLINK_MAX_BATCH 5u /* TESTING: was 60u, XBee ran out of buffers (TX status 0x32) */
 /* Longest JSON for one reading, plus the wrapper. */
 #define UPLINK_READING_MAX_JSON 112u
 #define UPLINK_BODY_SIZE (64u + UPLINK_MAX_BATCH * UPLINK_READING_MAX_JSON)
