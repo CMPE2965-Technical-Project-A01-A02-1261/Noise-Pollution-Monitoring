@@ -5,6 +5,7 @@
 .DS_Store
 node_modules/
 website/data/
+device/code/build/
 
 # secrets must never be committed
 noise-config.php
