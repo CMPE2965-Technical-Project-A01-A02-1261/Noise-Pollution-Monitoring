@@ -1,0 +1,6 @@
+/home/sadie/capstone/device/code/Core/Src/clock.c:9:6:Clock_Set	24	static
+/home/sadie/capstone/device/code/Core/Src/clock.c:16:6:Clock_IsSet	8	static
+/home/sadie/capstone/device/code/Core/Src/clock.c:23:6:Clock_TickToUnixMs	24	static
+/home/sadie/capstone/device/code/Core/Src/clock.c:33:16:DaysFromCivil	96	static
+/home/sadie/capstone/device/code/Core/Src/clock.c:43:9:Clock_FromCivil	40	static
+/home/sadie/capstone/device/code/Core/Src/clock.c:51:8:Clock_FormatIso	120	static

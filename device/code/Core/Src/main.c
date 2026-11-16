@@ -22,6 +22,13 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "battery.h"
+#include "sound.h"
+#include "uplink.h"
+#include "clock.h"
+#include "message.h"
+
+#include <stdlib.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -36,6 +43,31 @@
 #define BATTERY_DESIGN_CAPACITY_MAH 3000
 /* How often the main loop refreshes battery_status (ms). */
 #define BATTERY_POLL_INTERVAL_MS 5000
+/* GNSS one shot requests. Cellular is unavailable while the XBee searches
+ * for a fix, so keep these infrequent. */
+#define GNSS_STARTUP_DELAY_MS 10000   /* let the XBee boot first */
+#define GNSS_POLL_INTERVAL_MS 600000  /* 10 minutes */
+#define GNSS_TIMEOUT_S 120
+/* Give up waiting for the XBee's GNSS result this long after its own
+ * timeout, so a lost response can't block GNSS and uploads forever. */
+#define GNSS_RESPONSE_GRACE_MS 30000
+
+/* User button B1 (PC13, low while pressed) starts and stops recording.
+ * Presses closer together than BUTTON_DEBOUNCE_MS are switch bounce. A
+ * press only counts if B1 is still held BUTTON_CONFIRM_MS after the edge,
+ * which filters out the falling edges from bounce on release. */
+#define BUTTON_DEBOUNCE_MS 250u
+#define BUTTON_CONFIRM_MS 20u
+
+/* TESTING: skip GNSS and use a fixed position, so uploads can be tested
+ * without a fix. The clock is set from the build time of this file, so
+ * timestamps are off by however long it was between building and booting
+ * (the phone's "DT" message replaces it). Set to 0 to restore GNSS. */
+#define TEST_STATIC_POSITION 1
+#define TEST_LATITUDE_E7 537728000    /* 53.7728 */
+#define TEST_LONGITUDE_E7 -1133899000 /* -113.3899 */
+/* Build machine's offset from UTC in hours (__TIME__ is local time). */
+#define TEST_BUILD_UTC_OFFSET_H (-6)
 
 /* USER CODE END PD */
 
@@ -55,7 +87,12 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 static uint8_t api_rx_byte;
 volatile API_Status api_status;
+/* Set by the B1 interrupt, handled by the main loop. */
+static volatile bool button_pressed;
+static volatile uint32_t button_press_tick;
 Battery_Status battery_status;
+/* Latest one second sound level from the microphone. */
+Sound_Reading sound_level;
 
 /* USER CODE END PV */
 
@@ -72,6 +109,29 @@ static void MX_I2S1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+#if TEST_STATIC_POSITION
+/* UTC seconds from __DATE__ ("Mmm dd yyyy") and __TIME__ ("hh:mm:ss"). */
+static int64_t BuildTimeUnix(void)
+{
+  static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+  const char *d = __DATE__;
+  const char *t = __TIME__;
+  unsigned month = 1;
+  for (unsigned i = 0; i < 12u; i++) {
+    if (strncmp(d, months + 3u * i, 3) == 0) {
+      month = i + 1u;
+    }
+  }
+  unsigned day = (d[4] == ' ' ? 0u : (unsigned)(d[4] - '0')) * 10u + (unsigned)(d[5] - '0');
+  int year = atoi(d + 7);
+  unsigned hour = (unsigned)atoi(t);
+  unsigned minute = (unsigned)atoi(t + 3);
+  unsigned second = (unsigned)atoi(t + 6);
+  return Clock_FromCivil(year, month, day, hour, minute, second) -
+         (int64_t)TEST_BUILD_UTC_OFFSET_H * 3600;
+}
+#endif
 
 /* printf() retargeting. LPUART1 (the debug UART) is not enabled in code.ioc,
  * so output is discarded. Enable LPUART1 in CubeMX and define DEBUG_UART to
@@ -135,17 +195,52 @@ int main(void)
   if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
     Battery_Read(&battery_status);
   }
+  /* Microphone on I2S1 (PA5 CK / PA7 SD / PB0 WS), DMA to one second Leq.
+   * Recording starts and stops with the user button (B1); it is off at
+   * boot. Once started, a failed start is retried by Sound_Read. */
+
   uint32_t last_battery_poll = HAL_GetTick();
+#if TEST_STATIC_POSITION
+  LatitudeE7 = TEST_LATITUDE_E7;
+  LongitudeE7 = TEST_LONGITUDE_E7;
+  LatSet = true;
+  LngSet = true;
+  Clock_Set(BuildTimeUnix(), HAL_GetTick());
+#else
+  uint32_t next_gnss_poll = HAL_GetTick() + GNSS_STARTUP_DELAY_MS;
+  uint32_t gnss_request_tick = 0;
+#endif
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1) {
-    API_Status status;
+    static API_Status status; /* 1.5 kB, kept off the stack */
     while (API_ReadStatus(&status)) {
     	HandleAPI(&status);
     }
+
+    /* B1 toggles recording. Readings already taken are still uploaded
+     * after a stop. */
+    if (button_pressed &&
+        HAL_GetTick() - button_press_tick >= BUTTON_CONFIRM_MS) {
+      button_pressed = false;
+      if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
+        if (Sound_IsRunning()) {
+          Sound_Stop();
+        } else {
+          Sound_Start(&hi2s1);
+        }
+      }
+    }
+
+    Sound_Reading reading;
+    while (Sound_Read(&reading)) {
+      sound_level = reading;
+      Uplink_AddReading(&reading);
+    }
+    Uplink_Process();
 
     if (Battery_IsConnected() &&
         HAL_GetTick() - last_battery_poll >= BATTERY_POLL_INTERVAL_MS) {
@@ -157,6 +252,21 @@ int main(void)
     	  if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
     	    Battery_Read(&battery_status);
     	  }
+
+#if !TEST_STATIC_POSITION
+    /* GNSS takes the XBee off cellular, so don't start it mid upload. */
+    if (!GNSSPending && Uplink_IsIdle() &&
+        (int32_t)(HAL_GetTick() - next_gnss_poll) >= 0) {
+      if (RequestGNSS(GNSS_TIMEOUT_S)) {
+        gnss_request_tick = HAL_GetTick();
+        next_gnss_poll = gnss_request_tick + GNSS_POLL_INTERVAL_MS;
+      }
+    }
+    if (GNSSPending && HAL_GetTick() - gnss_request_tick >
+                       GNSS_TIMEOUT_S * 1000u + GNSS_RESPONSE_GRACE_MS) {
+      GNSSPending = false;
+    }
+#endif
 
 
     /* USER CODE END WHILE */
@@ -277,10 +387,10 @@ static void MX_I2S1_Init(void)
   /* USER CODE END I2S1_Init 1 */
   hi2s1.Instance = SPI1;
   hi2s1.Init.Mode = I2S_MODE_MASTER_RX;
-  hi2s1.Init.Standard = I2S_STANDARD_PHILIPS;
+  hi2s1.Init.Standard = I2S_STANDARD_MSB;
   hi2s1.Init.DataFormat = I2S_DATAFORMAT_24B;
   hi2s1.Init.MCLKOutput = I2S_MCLKOUTPUT_DISABLE;
-  hi2s1.Init.AudioFreq = I2S_AUDIOFREQ_32K;
+  hi2s1.Init.AudioFreq = I2S_AUDIOFREQ_48K;
   hi2s1.Init.CPOL = I2S_CPOL_LOW;
   if (HAL_I2S_Init(&hi2s1) != HAL_OK)
   {
@@ -351,7 +461,7 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
@@ -376,7 +486,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
@@ -401,7 +511,43 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-/* USER CODE BEGIN 4 */
+/* XBee UART: every received byte goes to the API frame parser. */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART1) {
+    API_ProcessByte(api_rx_byte);
+    if (HAL_UART_Receive_IT(&huart1, &api_rx_byte, 1) != HAL_OK) {
+      Error_Handler();
+    }
+  }
+}
+
+/* Line errors (framing/noise, e.g. while the XBee powers up) drop the frame
+ * in progress. For those the HAL keeps receiving; only overrun and timeout
+ * errors stop reception, so re-arm just in that case. */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == USART1) {
+    API_ResetParser();
+    if (huart->RxState == HAL_UART_STATE_READY) {
+      HAL_UART_Receive_IT(&huart1, &api_rx_byte, 1);
+    }
+  }
+}
+
+/* B1 pressed (PC13 falls). Only flags it; the main loop starts or stops
+ * recording, since that calls HAL functions that wait on SysTick. */
+void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin) {
+	static uint32_t last_press;
+	if (GPIO_Pin != B1_Pin) {
+		return;
+	}
+	uint32_t now = HAL_GetTick();
+	if (now - last_press >= BUTTON_DEBOUNCE_MS) {
+		last_press = now;
+		button_press_tick = now;
+		button_pressed = true;
+	}
+}
+
 void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin != GPIO_PIN_15 || api_status.frame_type != 0x88 ||
 	    api_status.data_length < 4 || api_status.data[2] != 0)
