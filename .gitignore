@@ -8,3 +8,4 @@ website/data/
 
 # secrets must never be committed
 noise-config.php
+device/code/Core/Inc/device_secrets.h

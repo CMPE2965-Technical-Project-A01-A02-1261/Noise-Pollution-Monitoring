@@ -12,7 +12,8 @@ optional packet to request time and position from device)
 
 "REQUEST TIME" device asks app for current time
 
-"DT YYYY-MM-DDTHH:MM:SS"
+"DT YYYY-MM-DDTHH:MM:SS" current date and time in UTC (not local time); the device uses it
+to timestamp readings sent to the server until it has a GNSS fix
 
 "REQUEST POS" device asks app for position
 
