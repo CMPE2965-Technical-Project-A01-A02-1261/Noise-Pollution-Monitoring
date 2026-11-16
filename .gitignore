@@ -6,6 +6,7 @@
 node_modules/
 website/data/
 device/code/build/
+*.elf
 
 # secrets must never be committed
 noise-config.php
