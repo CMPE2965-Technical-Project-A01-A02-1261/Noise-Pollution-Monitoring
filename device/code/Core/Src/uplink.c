@@ -11,12 +11,16 @@
  *   0x42 Socket Connect (hostname)  -> 0xC2 response, then 0xCF state
  *                                      "connected" once TCP is up
  *   0x44 Socket Send (request)      -> 0x89 TX status for the last chunk
- *   0xCD Socket Receive (response)  -> look for "200" and "accepted"
+ *   0xCD Socket Receive (response)  -> read the HTTP status, and for 200
+ *                                      look for "accepted"
  *   0x43 Socket Close               -> 0xC3 response
- * Readings leave the buffer only after the server accepted them; on any
- * failure they are sent again later. The server ignores readings it already
- * has (same device and timestamp), so a resend after a lost response is
- * harmless.
+ * What happens to the batch depends on the reply (see the data contract):
+ *   200                     delivered, readings removed
+ *   400                     rejected, readings dropped (resending can't help)
+ *   401, 404                key or device ID wrong, readings kept, slow retry
+ *   anything else / no reply  readings kept, retry after UPLINK_RETRY_MS
+ * The server ignores readings it already has (same device and timestamp),
+ * so a resend after a lost response is harmless.
  *
  * Nothing here blocks except the UART writes: Uplink_Process advances the
  * request from the main loop and Uplink_HandleFrame feeds it the responses. */
@@ -45,6 +49,9 @@
 #define UPLINK_CLOSE_TIMEOUT_MS 5000u
 /* Wait before trying again after a failure. */
 #define UPLINK_RETRY_MS 30000u
+/* Wait after a 401 or 404: a wrong key or device ID won't fix itself, but
+ * keep trying in case the server side is corrected. */
+#define UPLINK_SLOW_RETRY_MS 600000u /* 10 minutes */
 
 /* XBee API frame types and values used here. */
 #define FRAME_SOCKET_CREATE 0x40
@@ -73,6 +80,14 @@ typedef struct {
 	uint8_t flags;
 } Uplink_Reading;
 
+/* What to do with the batch once the request ends. */
+typedef enum {
+	UPLINK_RESULT_RETRY,      /* keep, retry after UPLINK_RETRY_MS */
+	UPLINK_RESULT_DELIVERED,  /* 200 with "accepted": remove */
+	UPLINK_RESULT_REJECTED,   /* 400: drop */
+	UPLINK_RESULT_SLOW_RETRY  /* 401/404: keep, retry after UPLINK_SLOW_RETRY_MS */
+} Uplink_Result;
+
 typedef enum {
 	UPLINK_IDLE,
 	UPLINK_CREATING,     /* waiting for 0xC0 */
@@ -95,7 +110,14 @@ static uint8_t send_frame_id;
 static uint32_t request_start;
 static uint32_t close_start;
 static uint32_t next_attempt;
-static bool result_ok;
+static Uplink_Result result;
+
+/* For checking from the debugger: the last HTTP status received (0 if the
+ * request failed before one arrived), and batches/readings dropped after a
+ * 400. A run of 400s points at a firmware bug in the request. */
+static volatile uint16_t last_http_status;
+static volatile uint32_t rejected_batch_count;
+static volatile uint32_t rejected_reading_count;
 
 /* Response matching, across Socket Receive frames. */
 static char status_line[13];
@@ -251,19 +273,30 @@ static void StartClose(void)
 	Frame(frame, sizeof(frame));
 }
 
-/* Ends the request. Readings are removed only when the server accepted
- * them. */
+/* Ends the request and removes, keeps or drops the batch depending on the
+ * result. */
 static void Finish(void)
 {
 	uint32_t now = HAL_GetTick();
-	if (result_ok) {
+	switch (result) {
+	case UPLINK_RESULT_REJECTED:
+		rejected_batch_count++;
+		rejected_reading_count += inflight;
+		/* fall through: the batch leaves the buffer either way */
+	case UPLINK_RESULT_DELIVERED:
 		readings_tail = (readings_tail + inflight) % UPLINK_BUFFER_SIZE;
 		readings_count -= inflight;
 		/* Work off a backlog right away, otherwise wait for the interval. */
 		next_attempt = readings_count >= UPLINK_MAX_BATCH ? now
 		                                                  : request_start + UPLINK_INTERVAL_MS;
-	} else {
+		break;
+	case UPLINK_RESULT_SLOW_RETRY:
+		next_attempt = now + UPLINK_SLOW_RETRY_MS;
+		break;
+	case UPLINK_RESULT_RETRY:
+	default:
 		next_attempt = now + UPLINK_RETRY_MS;
+		break;
 	}
 	inflight = 0;
 	state = UPLINK_IDLE;
@@ -272,7 +305,7 @@ static void Finish(void)
 /* Abandons the request; closes the socket if one was created. */
 static void Fail(void)
 {
-	result_ok = false;
+	result = UPLINK_RESULT_RETRY;
 	if (state == UPLINK_IDLE || state == UPLINK_CREATING) {
 		Finish();
 	} else if (state != UPLINK_CLOSING) {
@@ -288,7 +321,8 @@ static void StartRequest(void)
 	frame[2] = SOCKET_PROTOCOL_TCP;
 	pending_frame_id = frame[1];
 	request_start = HAL_GetTick();
-	result_ok = false;
+	result = UPLINK_RESULT_RETRY;
+	last_http_status = 0;
 	inflight = 0;
 	status_line_len = 0;
 	accepted_match = 0;
@@ -345,11 +379,40 @@ static void ReadResponse(const char *data, uint16_t length)
 	}
 }
 
-/* "HTTP/1.1 200" (or 1.0). */
-static bool ResponseIsOk(void)
+/* Status code from "HTTP/1.1 200" (or 1.0), or 0 if it hasn't all arrived
+ * yet or isn't a status line. */
+static uint16_t ResponseStatus(void)
 {
-	return status_line_len >= 12u && strncmp(status_line, "HTTP/1.", 7) == 0 &&
-	       strncmp(status_line + 8, " 200", 4) == 0;
+	if (status_line_len < 12u || strncmp(status_line, "HTTP/1.", 7) != 0 ||
+	    status_line[8] != ' ') {
+		return 0;
+	}
+	uint16_t code = 0;
+	for (int i = 9; i < 12; i++) {
+		char c = status_line[i];
+		if (c < '0' || c > '9') {
+			return 0;
+		}
+		code = (uint16_t)(code * 10u + (uint16_t)(c - '0'));
+	}
+	return code;
+}
+
+/* The result for a status code. A 200 only counts once "accepted" has been
+ * seen in the body. */
+static Uplink_Result ResultFor(uint16_t code)
+{
+	switch (code) {
+	case 200:
+		return accepted_found ? UPLINK_RESULT_DELIVERED : UPLINK_RESULT_RETRY;
+	case 400:
+		return UPLINK_RESULT_REJECTED;
+	case 401:
+	case 404:
+		return UPLINK_RESULT_SLOW_RETRY;
+	default:
+		return UPLINK_RESULT_RETRY;
+	}
 }
 
 static void SendConnect(void)
@@ -410,7 +473,8 @@ void Uplink_HandleFrame(const API_Status *status)
 			}
 		} else if (state == UPLINK_RESPONSE && d[1] == SOCKET_STATE_TRANSPORT_CLOSED) {
 			/* Server finished its reply (Connection: close). */
-			result_ok = ResponseIsOk() && accepted_found;
+			last_http_status = ResponseStatus();
+			result = ResultFor(last_http_status);
 			StartClose();
 		} else if (state != UPLINK_IDLE && state != UPLINK_CLOSING &&
 		           d[1] != SOCKET_STATE_CONNECTED) {
@@ -421,8 +485,12 @@ void Uplink_HandleFrame(const API_Status *status)
 	case FRAME_SOCKET_RECEIVE: /* socket ID, status, payload */
 		if (state == UPLINK_RESPONSE && len >= 2u && d[0] == socket_id) {
 			ReadResponse(status->data + 2, (uint16_t)(len - 2u));
-			if (ResponseIsOk() && accepted_found) {
-				result_ok = true;
+			/* Close as soon as the outcome is known: right after the status
+			 * line for an error, or once "accepted" shows up for a 200. */
+			uint16_t code = ResponseStatus();
+			if (code != 0u && (code != 200u || accepted_found)) {
+				last_http_status = code;
+				result = ResultFor(code);
 				StartClose();
 			}
 		}

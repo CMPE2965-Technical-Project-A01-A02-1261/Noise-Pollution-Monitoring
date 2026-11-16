@@ -41,7 +41,8 @@
 /* Battery design capacity written to the BQ27441 at boot (mAh).
  * 0 keeps the gauge's current setting. */
 #define BATTERY_DESIGN_CAPACITY_MAH 3000
-/* How often the main loop refreshes battery_status (ms). */
+/* How often the main loop retries a fuel gauge that isn't connected (ms).
+ * Each failed try waits out I2C timeouts, so not every loop. */
 #define BATTERY_POLL_INTERVAL_MS 5000
 /* GNSS one shot requests. Cellular is unavailable while the XBee searches
  * for a fix, so keep these infrequent. */
@@ -242,10 +243,13 @@ int main(void)
     }
     Uplink_Process();
 
-    if (!Battery_IsConnected())
-    	  if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
-    	    Battery_Read(&battery_status);
-    	  }
+    if (!Battery_IsConnected() &&
+        HAL_GetTick() - last_battery_poll >= BATTERY_POLL_INTERVAL_MS) {
+      last_battery_poll = HAL_GetTick();
+      if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
+        Battery_Read(&battery_status);
+      }
+    }
 
 #if !TEST_STATIC_POSITION
     /* GNSS takes the XBee off cellular, so don't start it mid upload. */
