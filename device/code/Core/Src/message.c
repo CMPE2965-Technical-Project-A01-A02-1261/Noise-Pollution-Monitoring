@@ -21,6 +21,13 @@ volatile bool GNSSPending = false;
 int32_t GNSSAltitude_mm = 0;
 uint32_t GNSSLockTime = 0; /* seconds since 2000-01-01 00:00:00 */
 
+/* Time from the cellular network (XBee "DT"). NetworkTimeTick is the HAL
+ * tick of the last valid answer; the main loop uses it to decide when to ask
+ * again. NetworkTimeRaw keeps the last value received, for debugging. */
+volatile bool NetworkTimeValid = false;
+volatile uint32_t NetworkTimeTick = 0;
+volatile uint32_t NetworkTimeRaw = 0;
+
 /* Recording session state, used for the TIME status packet. */
 bool Recording = false;
 uint32_t RecordStartTick = 0;
@@ -42,6 +49,7 @@ int32_t LongitudeE7 = 0;
 
 static bool ParseDateTime(const char *str, DateTime_t *dt);
 static void HandleGNSS(const char *data, uint16_t length, uint32_t tick);
+static void HandleNetworkTime(const char *data, uint16_t length, uint32_t tick);
 
 void HandleAPI(const API_Status *status){
     if (status->frame_type == 0x89 && status->data_length > 0) {
@@ -54,6 +62,11 @@ void HandleAPI(const API_Status *status){
     }
     else if (status->frame_type == 0xAD) {
       ReadBluetooth((const uint8_t *)status->data, status->data_length, status->tick);
+    }
+    //AT command response: "DT" is the time from the cellular network
+    else if (status->frame_type == 0x88 && status->data_length >= 3 &&
+             status->data[0] == 'D' && status->data[1] == 'T') {
+      HandleNetworkTime(status->data, status->data_length, status->tick);
     }
     //GNSS request response: type, status (0 = success)
     else if (status->frame_type == 0xBD && status->data_length >= 2) {
@@ -77,6 +90,41 @@ static int32_t ReadBE32(const char *p){
 	                 ((uint32_t)(uint8_t)p[1] << 16) |
 	                 ((uint32_t)(uint8_t)p[2] << 8) |
 	                 (uint32_t)(uint8_t)p[3]);
+}
+
+/* Earliest and latest network time accepted, in seconds since 2000. Before
+ * the XBee gets the time from the network it can report 0 or a time just
+ * after its own epoch. */
+#define NETWORK_TIME_MIN_S 788918400u   /* 2025-01-01 */
+#define NETWORK_TIME_MAX_S 3155760000u  /* 2100-01-01 */
+
+/* The XBee's "DT" is the time the cell tower reports, which is local time,
+ * not UTC (there is no AT command for UTC). Local time is UTC plus this
+ * offset. Saskatchewan is UTC-6 all year (no daylight saving); change this
+ * if the device is used in another time zone. */
+#define NETWORK_TIME_UTC_OFFSET_S (-6 * 3600)
+
+/* AT "DT" response: name(2) status(1) value, the value being local seconds
+ * since 2000-01-01 00:00:00, big endian. */
+static void HandleNetworkTime(const char *data, uint16_t length, uint32_t tick){
+	if ((uint8_t)data[2] != 0u){
+		return; //error, e.g. no time from the network yet
+	}
+	uint16_t n = (uint16_t)(length - 3u);
+	if (n == 0u || n > 4u){
+		return;
+	}
+	uint32_t secs = 0;
+	for (uint16_t i = 0; i < n; i++){
+		secs = (secs << 8) | (uint8_t)data[3u + i];
+	}
+	NetworkTimeRaw = secs;
+	if (secs < NETWORK_TIME_MIN_S || secs > NETWORK_TIME_MAX_S){
+		return;
+	}
+	Clock_Set((int64_t)secs + CLOCK_UNIX_2000 - NETWORK_TIME_UTC_OFFSET_S, tick);
+	NetworkTimeTick = tick;
+	NetworkTimeValid = true;
 }
 
 /* GNSS One Shot Response (0xBF) payload:
@@ -274,13 +322,14 @@ void StatusResponse(void){
 }
 
 
+/* Queries an AT register. No parameter is sent: with one, the XBee would
+ * set the register instead of reading it. */
 bool SendATCommand(const char * command){
-	uint8_t data[5];
+	uint8_t data[4];
 	data[0] = 0x08;
 	data[1] = API_GetNextFrameId();
 	data[2] = command[0];
 	data[3] = command[1];
-	data[4] = 0;
 	return Frame(data, sizeof(data));
 }
 

@@ -26,9 +26,6 @@
 #include "uplink.h"
 #include "clock.h"
 #include "message.h"
-
-#include <stdlib.h>
-#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,14 +58,16 @@
 #define BUTTON_CONFIRM_MS 20u
 
 /* TESTING: skip GNSS and use a fixed position, so uploads can be tested
- * without a fix. The clock is set from the build time of this file, so
- * timestamps are off by however long it was between building and booting
- * (the phone's "DT" message replaces it). Set to 0 to restore GNSS. */
+ * without a fix. Set to 0 to restore GNSS. */
 #define TEST_STATIC_POSITION 1
 #define TEST_LATITUDE_E7 537728000    /* 53.7728 */
 #define TEST_LONGITUDE_E7 -1133899000 /* -113.3899 */
-/* Build machine's offset from UTC in hours (__TIME__ is local time). */
-#define TEST_BUILD_UTC_OFFSET_H (-6)
+
+/* Time from the cellular network (XBee AT "DT"). Asked every RETRY until an
+ * answer arrives, then every RESYNC: the clock runs on the HAL tick, whose
+ * oscillator can drift around a percent. */
+#define NETWORK_TIME_RETRY_MS 10000u
+#define NETWORK_TIME_RESYNC_MS 600000u /* 10 minutes */
 
 /* USER CODE END PD */
 
@@ -110,29 +109,6 @@ static void MX_I2S1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-#if TEST_STATIC_POSITION
-/* UTC seconds from __DATE__ ("Mmm dd yyyy") and __TIME__ ("hh:mm:ss"). */
-static int64_t BuildTimeUnix(void)
-{
-  static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
-  const char *d = __DATE__;
-  const char *t = __TIME__;
-  unsigned month = 1;
-  for (unsigned i = 0; i < 12u; i++) {
-    if (strncmp(d, months + 3u * i, 3) == 0) {
-      month = i + 1u;
-    }
-  }
-  unsigned day = (d[4] == ' ' ? 0u : (unsigned)(d[4] - '0')) * 10u + (unsigned)(d[5] - '0');
-  int year = atoi(d + 7);
-  unsigned hour = (unsigned)atoi(t);
-  unsigned minute = (unsigned)atoi(t + 3);
-  unsigned second = (unsigned)atoi(t + 6);
-  return Clock_FromCivil(year, month, day, hour, minute, second) -
-         (int64_t)TEST_BUILD_UTC_OFFSET_H * 3600;
-}
-#endif
 
 /* printf() retargeting. LPUART1 (the debug UART) is not enabled in code.ioc,
  * so output is discarded. Enable LPUART1 in CubeMX and define DEBUG_UART to
@@ -206,7 +182,6 @@ int main(void)
   LongitudeE7 = TEST_LONGITUDE_E7;
   LatSet = true;
   LngSet = true;
-  Clock_Set(BuildTimeUnix(), HAL_GetTick());
 #else
   uint32_t next_gnss_poll = HAL_GetTick() + GNSS_STARTUP_DELAY_MS;
   uint32_t gnss_request_tick = 0;
@@ -242,6 +217,22 @@ int main(void)
       Uplink_AddReading(&reading);
     }
     Uplink_Process();
+
+    /* Network time. Not during GNSS, which takes the XBee off cellular. */
+    {
+      static bool time_queried;
+      static uint32_t last_time_query;
+      uint32_t now = HAL_GetTick();
+      bool fresh = NetworkTimeValid &&
+                   now - NetworkTimeTick < NETWORK_TIME_RESYNC_MS;
+      if (!fresh && !GNSSPending &&
+          (!time_queried || now - last_time_query >= NETWORK_TIME_RETRY_MS)) {
+        if (SendATCommand("DT")) {
+          time_queried = true;
+          last_time_query = now;
+        }
+      }
+    }
 
     if (!Battery_IsConnected() &&
         HAL_GetTick() - last_battery_poll >= BATTERY_POLL_INTERVAL_MS) {

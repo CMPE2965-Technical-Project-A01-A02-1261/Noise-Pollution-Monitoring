@@ -25,6 +25,10 @@ extern uint8_t GNSS;
 extern int32_t GNSSAltitude_mm;
 extern uint32_t GNSSLockTime;
 
+extern volatile bool NetworkTimeValid;
+extern volatile uint32_t NetworkTimeTick;
+extern volatile uint32_t NetworkTimeRaw;
+
 extern bool Recording;
 extern uint32_t RecordStartTick;
 

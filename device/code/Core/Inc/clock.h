@@ -5,8 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* UTC wall clock built on the HAL tick. Whenever GNSS or the phone gives a
- * time, the UTC and the tick at that moment are saved; any other tick is
+/* UTC wall clock built on the HAL tick. Whenever the cellular network, GNSS
+ * or the phone gives a time, the UTC and the tick at that moment are saved; any other tick is
  * converted as utc = saved_utc + (tick - saved_tick). */
 
 /* Seconds from 1970-01-01 to 2000-01-01, the XBee GNSS epoch. */
