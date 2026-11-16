@@ -2,7 +2,8 @@
  * connection.
  *
  * Readings are buffered with the HAL tick they were taken at and only sent
- * once the clock has a real UTC time (from GNSS or the phone), so readings
+ * once the clock has a real UTC time (from the cellular network, GNSS or the
+ * phone), so readings
  * taken before that get correct timestamps too.
  *
  * Every UPLINK_INTERVAL_MS the oldest readings go out as one HTTP POST,
@@ -10,7 +11,8 @@
  *   0x40 Socket Create (TCP)        -> 0xC0 response gives the socket ID
  *   0x42 Socket Connect (hostname)  -> 0xC2 response, then 0xCF state
  *                                      "connected" once TCP is up
- *   0x44 Socket Send (request)      -> 0x89 TX status for the last chunk
+ *   0x44 Socket Send (request)      -> 0x89 TX status for each chunk; the
+ *                                      next chunk waits for it
  *   0xCD Socket Receive (response)  -> read the HTTP status, and for 200
  *                                      look for "accepted"
  *   0x43 Socket Close               -> 0xC3 response
@@ -37,11 +39,13 @@
 /* Readings held while waiting for a time or a connection: 30 minutes. */
 #define UPLINK_BUFFER_SIZE 1800u
 /* Readings per request. Also how far a backlog is worked off per request. */
-#define UPLINK_MAX_BATCH 5u /* TESTING: was 60u, XBee ran out of buffers (TX status 0x32) */
+#define UPLINK_MAX_BATCH 30u
 /* Longest JSON for one reading, plus the wrapper. */
 #define UPLINK_READING_MAX_JSON 112u
 #define UPLINK_BODY_SIZE (64u + UPLINK_MAX_BATCH * UPLINK_READING_MAX_JSON)
-/* Socket Send payload per API frame (frame length is limited to 255). */
+/* Socket Send payload per API frame (frame length is limited to 255). Each
+ * chunk is sent only after the XBee's TX status for the one before: sent back
+ * to back, a few KB overran its buffers (TX status 0x32). */
 #define UPLINK_CHUNK 240u
 
 /* Give up on a request after this long (LTE-M connections are slow). */
@@ -93,6 +97,7 @@ typedef enum {
 	UPLINK_CREATING,     /* waiting for 0xC0 */
 	UPLINK_CONNECTING,   /* waiting for 0xC2 */
 	UPLINK_HANDSHAKE,    /* waiting for 0xCF connected */
+	UPLINK_SENDING,      /* sending the request, waiting for 0x89 per chunk */
 	UPLINK_RESPONSE,     /* request sent, reading the reply */
 	UPLINK_CLOSING       /* waiting for 0xC3 */
 } Uplink_State;
@@ -106,7 +111,7 @@ static uint32_t inflight;       /* readings from the tail in the current request
 static Uplink_State state;
 static uint8_t socket_id;
 static uint8_t pending_frame_id;
-static uint8_t send_frame_id;
+static uint8_t send_frame_id;   /* frame ID of the chunk waiting for 0x89 */
 static uint32_t request_start;
 static uint32_t close_start;
 static uint32_t next_attempt;
@@ -126,6 +131,11 @@ static uint8_t accepted_match;
 static bool accepted_found;
 
 static char body[UPLINK_BODY_SIZE];
+/* The request being sent: header then body, sent_length bytes done. */
+static char header[256];
+static size_t header_length;
+static size_t body_length;
+static size_t sent_length;
 
 void Uplink_AddReading(const Sound_Reading *reading)
 {
@@ -212,38 +222,41 @@ static size_t BuildBody(void)
 	return len;
 }
 
-/* Sends bytes on the socket as one or more Socket Send frames. Only the last
- * frame asks for a TX status, so the status queue is not flooded. */
-static bool SocketSend(const char *data, size_t length, bool last)
+/* Sends the next chunk of the request (header then body) as one Socket Send
+ * frame. Its TX status (0x89) triggers the next chunk. */
+static bool SendNextChunk(void)
 {
 	uint8_t frame[4 + UPLINK_CHUNK];
-	while (length > 0u) {
-		size_t chunk = length > UPLINK_CHUNK ? UPLINK_CHUNK : length;
-		bool final = last && chunk == length;
-		frame[0] = FRAME_SOCKET_SEND;
-		frame[1] = final ? API_GetNextFrameId() : 0u;
-		frame[2] = socket_id;
-		frame[3] = 0x00; /* transmit options */
-		memcpy(&frame[4], data, chunk);
-		if (final) {
-			send_frame_id = frame[1];
-		}
-		if (!Frame(frame, (uint8_t)(4u + chunk))) {
-			return false;
-		}
-		data += chunk;
-		length -= chunk;
+	size_t total = header_length + body_length;
+	size_t chunk = total - sent_length;
+	if (chunk > UPLINK_CHUNK) {
+		chunk = UPLINK_CHUNK;
 	}
+	/* Copy from the header and/or body; a chunk can span both. */
+	for (size_t i = 0; i < chunk; i++) {
+		size_t pos = sent_length + i;
+		frame[4 + i] = (uint8_t)(pos < header_length ? header[pos]
+		                                             : body[pos - header_length]);
+	}
+	frame[0] = FRAME_SOCKET_SEND;
+	frame[1] = API_GetNextFrameId();
+	frame[2] = socket_id;
+	frame[3] = 0x00; /* transmit options */
+	send_frame_id = frame[1];
+	if (!Frame(frame, (uint8_t)(4u + chunk))) {
+		return false;
+	}
+	sent_length += chunk;
 	return true;
 }
 
+/* Builds the request and sends its first chunk. */
 static bool SendRequest(void)
 {
 	size_t body_len = BuildBody();
 	if (inflight == 0u) {
 		return false;
 	}
-	char header[256];
 	int header_len = snprintf(header, sizeof(header),
 	                          "POST %s HTTP/1.1\r\n"
 	                          "Host: %s\r\n"
@@ -257,8 +270,11 @@ static bool SendRequest(void)
 	if (header_len <= 0 || (size_t)header_len >= sizeof(header)) {
 		return false;
 	}
-	return SocketSend(header, (size_t)header_len, false) &&
-	       SocketSend(body, body_len, true);
+	header_length = (size_t)header_len;
+	body_length = body_len;
+	sent_length = 0;
+	state = UPLINK_SENDING;
+	return SendNextChunk();
 }
 
 static void StartClose(void)
@@ -467,11 +483,11 @@ void Uplink_HandleFrame(const API_Status *status)
 		}
 		if ((state == UPLINK_CONNECTING || state == UPLINK_HANDSHAKE) &&
 		    d[1] == SOCKET_STATE_CONNECTED) {
-			state = UPLINK_RESPONSE;
 			if (!SendRequest()) {
 				Fail();
 			}
-		} else if (state == UPLINK_RESPONSE && d[1] == SOCKET_STATE_TRANSPORT_CLOSED) {
+		} else if ((state == UPLINK_SENDING || state == UPLINK_RESPONSE) &&
+		           d[1] == SOCKET_STATE_TRANSPORT_CLOSED) {
 			/* Server finished its reply (Connection: close). */
 			last_http_status = ResponseStatus();
 			result = ResultFor(last_http_status);
@@ -483,7 +499,9 @@ void Uplink_HandleFrame(const API_Status *status)
 		break;
 
 	case FRAME_SOCKET_RECEIVE: /* socket ID, status, payload */
-		if (state == UPLINK_RESPONSE && len >= 2u && d[0] == socket_id) {
+		/* Also while sending: the server may answer an error early. */
+		if ((state == UPLINK_SENDING || state == UPLINK_RESPONSE) &&
+		    len >= 2u && d[0] == socket_id) {
 			ReadResponse(status->data + 2, (uint16_t)(len - 2u));
 			/* Close as soon as the outcome is known: right after the status
 			 * line for an error, or once "accepted" shows up for a 200. */
@@ -497,9 +515,17 @@ void Uplink_HandleFrame(const API_Status *status)
 		break;
 
 	case FRAME_TX_STATUS: /* status */
-		if (state == UPLINK_RESPONSE && status->frame_id == send_frame_id &&
-		    len >= 1u && d[0] != 0x00) {
-			Fail();
+		if (state == UPLINK_SENDING && status->frame_id == send_frame_id &&
+		    len >= 1u) {
+			if (d[0] != 0x00) {
+				Fail();
+			} else if (sent_length < header_length + body_length) {
+				if (!SendNextChunk()) {
+					Fail();
+				}
+			} else {
+				state = UPLINK_RESPONSE; /* whole request sent */
+			}
 		}
 		break;
 
