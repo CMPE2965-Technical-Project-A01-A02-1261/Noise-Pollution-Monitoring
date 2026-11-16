@@ -242,13 +242,7 @@ int main(void)
     }
     Uplink_Process();
 
-    if (Battery_IsConnected() &&
-        HAL_GetTick() - last_battery_poll >= BATTERY_POLL_INTERVAL_MS) {
-      last_battery_poll = HAL_GetTick();
-      Battery_Read(&battery_status);
-      StatusResponse();
-    }
-    else if (!Battery_IsConnected())
+    if (!Battery_IsConnected())
     	  if (Battery_Init(BATTERY_DESIGN_CAPACITY_MAH)) {
     	    Battery_Read(&battery_status);
     	  }
