@@ -22,6 +22,8 @@ typedef struct {
 } Sound_Reading;
 
 bool Sound_Start(I2S_HandleTypeDef *hi2s);
+void Sound_Stop(void);
+bool Sound_IsRunning(void);
 bool Sound_Read(Sound_Reading *reading);
 uint32_t Sound_GetSampleRate(void);
 uint8_t Sound_GetDroppedCount(void);

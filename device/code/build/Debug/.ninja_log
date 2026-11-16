@@ -65,3 +65,10 @@
 2	97	1794684441483827643	CMakeFiles/code.dir/Core/Src/stm32g0xx_it.c.obj	f0eda78a1e5e88b1
 1	110	1794684441482827569	CMakeFiles/code.dir/Core/Src/main.c.obj	d433e2ba45248f37
 110	186	1794684441591835643	code.elf	ec6d5107f89c5f17
+2	239	1794845081507435450	CMakeFiles/code.dir/Core/Src/main.c.obj	d433e2ba45248f37
+36	243	1794845081543220616	CMakeFiles/code.dir/Core/Src/uplink.c.obj	8d4a0b475f60a6fb
+36	253	1794845081541437577	CMakeFiles/code.dir/Core/Src/message.c.obj	f15005c38d1220de
+36	263	1794845081543015109	CMakeFiles/code.dir/Core/Src/sound.c.obj	fd843fda000b5b9d
+263	351	1794845081768451779	code.elf	ec6d5107f89c5f17
+1	110	1794845094706261263	CMakeFiles/code.dir/Core/Src/main.c.obj	d433e2ba45248f37
+110	188	1794845094815268084	code.elf	ec6d5107f89c5f17

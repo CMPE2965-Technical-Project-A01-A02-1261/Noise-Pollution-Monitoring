@@ -128,6 +128,8 @@ static volatile uint8_t queue_tail;
 static volatile uint8_t dropped_count;
 static volatile uint32_t last_window_tick;
 static volatile bool restart_needed;
+/* Capture is wanted (between Sound_Start and Sound_Stop). */
+static bool running;
 
 /* Actual frame rate from the I2S prescaler. The 64 MHz clock does not divide
  * evenly, so 48 kHz requested gives 47.619 kHz. */
@@ -310,7 +312,27 @@ bool Sound_Start(I2S_HandleTypeDef *hi2s)
 	}
 	window_samples = sample_rate; /* one second */
 	DesignFilter((double)sample_rate);
+	/* Readings left from before a stop are dropped. */
+	queue_tail = queue_head;
+	running = true;
 	return StartCapture();
+}
+
+/* Stops capture. The window in progress and any unread readings are
+ * dropped. Sound_Start begins again. */
+void Sound_Stop(void)
+{
+	running = false;
+	if (sound_i2s != NULL) {
+		HAL_I2S_DMAStop(sound_i2s);
+	}
+	restart_needed = false;
+	queue_tail = queue_head;
+}
+
+bool Sound_IsRunning(void)
+{
+	return running;
 }
 
 uint32_t Sound_GetSampleRate(void)
@@ -327,7 +349,7 @@ uint8_t Sound_GetDroppedCount(void)
  * also restarts capture after an error or stall. */
 bool Sound_Read(Sound_Reading *reading)
 {
-	if (sound_i2s == NULL) {
+	if (sound_i2s == NULL || !running) {
 		return false;
 	}
 	/* Read the ISR's tick before the current tick so the difference can't

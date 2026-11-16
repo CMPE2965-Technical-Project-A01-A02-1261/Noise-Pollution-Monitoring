@@ -52,6 +52,13 @@
  * timeout, so a lost response can't block GNSS and uploads forever. */
 #define GNSS_RESPONSE_GRACE_MS 30000
 
+/* User button B1 (PC13, low while pressed) starts and stops recording.
+ * Presses closer together than BUTTON_DEBOUNCE_MS are switch bounce. A
+ * press only counts if B1 is still held BUTTON_CONFIRM_MS after the edge,
+ * which filters out the falling edges from bounce on release. */
+#define BUTTON_DEBOUNCE_MS 250u
+#define BUTTON_CONFIRM_MS 20u
+
 /* TESTING: skip GNSS and use a fixed position, so uploads can be tested
  * without a fix. The clock is set from the build time of this file, so
  * timestamps are off by however long it was between building and booting
@@ -80,6 +87,9 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 static uint8_t api_rx_byte;
 volatile API_Status api_status;
+/* Set by the B1 interrupt, handled by the main loop. */
+static volatile bool button_pressed;
+static volatile uint32_t button_press_tick;
 Battery_Status battery_status;
 /* Latest one second sound level from the microphone. */
 Sound_Reading sound_level;
@@ -186,8 +196,8 @@ int main(void)
     Battery_Read(&battery_status);
   }
   /* Microphone on I2S1 (PA5 CK / PA7 SD / PB0 WS), DMA to one second Leq.
-   * A failed start is retried by Sound_Read. */
-  Sound_Start(&hi2s1);
+   * Recording starts and stops with the user button (B1); it is off at
+   * boot. Once started, a failed start is retried by Sound_Read. */
 
   uint32_t last_battery_poll = HAL_GetTick();
 #if TEST_STATIC_POSITION
@@ -209,6 +219,20 @@ int main(void)
     static API_Status status; /* 1.5 kB, kept off the stack */
     while (API_ReadStatus(&status)) {
     	HandleAPI(&status);
+    }
+
+    /* B1 toggles recording. Readings already taken are still uploaded
+     * after a stop. */
+    if (button_pressed &&
+        HAL_GetTick() - button_press_tick >= BUTTON_CONFIRM_MS) {
+      button_pressed = false;
+      if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
+        if (Sound_IsRunning()) {
+          Sound_Stop();
+        } else {
+          Sound_Start(&hi2s1);
+        }
+      }
     }
 
     Sound_Reading reading;
@@ -462,7 +486,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
@@ -507,6 +531,21 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
       HAL_UART_Receive_IT(&huart1, &api_rx_byte, 1);
     }
   }
+}
+
+/* B1 pressed (PC13 falls). Only flags it; the main loop starts or stops
+ * recording, since that calls HAL functions that wait on SysTick. */
+void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin) {
+	static uint32_t last_press;
+	if (GPIO_Pin != B1_Pin) {
+		return;
+	}
+	uint32_t now = HAL_GetTick();
+	if (now - last_press >= BUTTON_DEBOUNCE_MS) {
+		last_press = now;
+		button_press_tick = now;
+		button_pressed = true;
+	}
 }
 
 void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin) {
