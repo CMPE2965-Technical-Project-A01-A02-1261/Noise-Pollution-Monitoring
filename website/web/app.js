@@ -144,7 +144,7 @@ function buildChart(readings) {
     dot.setAttribute('cy', y(r.db));
     dot.setAttribute('visibility', 'visible');
     readout.textContent =
-      `${new Date(r.ts).toLocaleTimeString()}    ${r.db.toFixed(1)} dB${r.clipped ? '    (mic maxed out)' : ''}`;
+      `${new Date(r.ts).toLocaleTimeString()}    ${r.db.toFixed(1)} dB(A)${r.clipped ? '    (mic maxed out)' : ''}`;
   });
   overlay.addEventListener('mouseleave', () => {
     guide.setAttribute('visibility', 'hidden');
@@ -196,9 +196,9 @@ function buildMap(session) {
   const box = h('div', { class: 'map' });
   const legend = h('p', { class: 'meta' },
     'Dots show where each reading was taken: ',
-    h('span', { class: 'swatch', style: `background:${levelColor(0)}` }), ' under 55 dB  ',
-    h('span', { class: 'swatch', style: `background:${levelColor(60)}` }), ' 55 to 70 dB  ',
-    h('span', { class: 'swatch', style: `background:${levelColor(80)}` }), ' 70 dB or more. Click a dot for its time and level.');
+    h('span', { class: 'swatch', style: `background:${levelColor(0)}` }), ' under 55 dB(A)  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(60)}` }), ' 55 to 70 dB(A)  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(80)}` }), ' 70 dB(A) or more. Click a dot for its time and level.');
 
   // Leaflet measures the box, so it can only be set up after the box is on the page.
   setTimeout(() => {
@@ -215,7 +215,7 @@ function buildMap(session) {
     for (const r of points) {
       L.circleMarker([r.lat, r.lon], {
         radius: 4, color: '#ffffff', weight: 1, fillColor: levelColor(r.db), fillOpacity: 0.95,
-      }).bindPopup(`${new Date(r.ts).toLocaleTimeString()}<br>${r.db.toFixed(1)} dB${r.clipped ? ' (mic maxed out)' : ''}`).addTo(map);
+      }).bindPopup(`${new Date(r.ts).toLocaleTimeString()}<br>${r.db.toFixed(1)} dB(A)${r.clipped ? ' (mic maxed out)' : ''}`).addTo(map);
     }
     if (latlngs.length === 0) {
     latlngs.push([session.location.lat, session.location.lon]);
@@ -239,7 +239,7 @@ function perMinute(readings) {
     groups.get(minute).push(r.db);
   }
   return [...groups.entries()].map(([minute, dbs]) => {
-    // Leq is an energy average: convert to energy, average, convert back to dB.
+    // LAeq is an energy average: convert to energy, average, convert back to dB.
     const energy = dbs.reduce((sum, db) => sum + Math.pow(10, db / 10), 0) / dbs.length;
     return { start_ms: minute * 60000, leq: 10 * Math.log10(energy), lmax: Math.max(...dbs), n: dbs.length };
   });
@@ -253,7 +253,7 @@ function minuteTable(readings) {
       h('td', {}, m.lmax.toFixed(1)),
       h('td', {}, m.n)));
   return h('table', {},
-    h('thead', {}, h('tr', {}, h('th', {}, 'Minute'), h('th', {}, 'Leq (dB)'), h('th', {}, 'Lmax (dB)'), h('th', {}, 'Readings'))),
+    h('thead', {}, h('tr', {}, h('th', {}, 'Minute'), h('th', {}, 'LAeq (dB(A))'), h('th', {}, 'LAmax (dB(A))'), h('th', {}, 'Readings'))),
     h('tbody', {}, rows));
 }
 
@@ -284,10 +284,10 @@ function sessionsMap(sessions) {
 
   const box = h('div', { class: 'map' });
   const legend = h('p', { class: 'meta' },
-    'One pin per location, coloured by the loudest session there (Leq): ',
-    h('span', { class: 'swatch', style: `background:${levelColor(0)}` }), ' under 55 dB  ',
-    h('span', { class: 'swatch', style: `background:${levelColor(60)}` }), ' 55 to 70 dB  ',
-    h('span', { class: 'swatch', style: `background:${levelColor(80)}` }), ' 70 dB or more. A number on a pin means several sessions were recorded there. Click a pin to see them.');
+    'One pin per location, coloured by the loudest session there (LAeq): ',
+    h('span', { class: 'swatch', style: `background:${levelColor(0)}` }), ' under 55 dB(A)  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(60)}` }), ' 55 to 70 dB(A)  ',
+    h('span', { class: 'swatch', style: `background:${levelColor(80)}` }), ' 70 dB(A) or more. A number on a pin means several sessions were recorded there. Click a pin to see them.');
 
   setTimeout(() => {
     const map = L.map(box);
@@ -312,7 +312,7 @@ function sessionsMap(sessions) {
           group.map((s) => h('div', { class: 'session-popup-item' },
             h('div', {}, h('strong', {}, new Date(s.started_at).toLocaleString())),
             h('div', {}, `${s.device_id} · ${formatDuration(s.duration_s)}`),
-            h('div', {}, `Leq ${s.summary.leq.toFixed(1)} dB · Lmax ${s.summary.lmax.toFixed(1)} dB`),
+            h('div', {}, `LAeq ${s.summary.leq.toFixed(1)} dB(A) · LAmax ${s.summary.lmax.toFixed(1)} dB(A)`),
             h('a', { href: `#/session/${s.id}` }, 'View session →'))));
       };
 
@@ -446,7 +446,7 @@ async function showList() {
 
   const header = h('tr', {},
     h('th', {}, 'Session'), h('th', {}, 'Duration'),
-    h('th', {}, 'Location'), h('th', {}, 'Leq (dB)'), h('th', {}, 'Lmax (dB)'),
+    h('th', {}, 'Location'), h('th', {}, 'LAeq (dB(A))'), h('th', {}, 'LAmax (dB(A))'),
     h('th', {}, 'Notes'));
 
   const rows = sessions.map((s) =>
@@ -454,7 +454,7 @@ async function showList() {
       h('td', { class: 'session-cell' },
         h('a', { href: `#/session/${s.id}`, class: 'session-id' }, `#${s.id}`),
         h('span', { class: 'session-when' },
-          `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`)),
+          `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`)),
       h('td', {}, formatDuration(s.duration_s)),
         h('td', { class: 'location-cell' },
         h('span', { class: 'loc-main' }, formatLocation(s.location)),
@@ -488,22 +488,22 @@ async function showSession(id) {
     h('p', {}, h('a', { href: '#/' }, '← All sessions')),
     h('h1', {}, `Session ${s.id}`),
         h('p', { class: 'meta' },
-      `${s.device_id} · ${new Date(s.started_at).toLocaleString()} · ${formatDuration(s.duration_s)} · `,
+      `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { timeZoneName: 'short' })} · ${formatDuration(s.duration_s)} · `,
       h('span', { id: 'session-where', 'data-session': s.id }, formatLocation(s.location))),
     warnings(s).map((w) => h('div', { class: 'warning' }, w)),
 
     h('div', { class: 'stats' },
-      stat('Leq', sum.leq.toFixed(1), 'dB'), stat('Lmax', sum.lmax.toFixed(1), 'dB'),
-      stat('Lmin', sum.lmin.toFixed(1), 'dB'), stat('L10', sum.l10.toFixed(1), 'dB'),
-      stat('L50', sum.l50.toFixed(1), 'dB'), stat('L90', sum.l90.toFixed(1), 'dB'),
+      stat('LAeq', sum.leq.toFixed(1), 'dB(A)'), stat('LAmax', sum.lmax.toFixed(1), 'dB(A)'),
+      stat('LAmin', sum.lmin.toFixed(1), 'dB(A)'), stat('LA10', sum.l10.toFixed(1), 'dB(A)'),
+      stat('LA50', sum.l50.toFixed(1), 'dB(A)'), stat('LA90', sum.l90.toFixed(1), 'dB(A)'),
       stat('Readings', String(s.readings.length))),
     h('p', { class: 'meta' },
-      'Leq is the average level (energy basis). L10, L50 and L90 are the levels exceeded 10%, 50% and 90% of the time.'),
+      'LAeq is the A-weighted average level (energy basis). LA10, LA50 and LA90 are the levels exceeded 10%, 50% and 90% of the time.'),
 
     h('h2', {}, 'Location of readings'),
     buildMap(s),
     
-    h('h2', {}, 'Sound level over time (dB)'),
+    h('h2', {}, 'Sound level over time (dB(A))'),
     buildChart(s.readings),
 
     h('h2', {}, 'Interpreted data (per minute)'),
@@ -513,7 +513,7 @@ async function showSession(id) {
     h('div', { class: 'toolbar' }, csvButton),
     h('p', { class: 'meta' }, `First ${RAW_ROWS_SHOWN} of ${s.readings.length} readings.`),
     h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB'), h('th', {}, 'Mic maxed out'))),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB(A)'), h('th', {}, 'Mic maxed out'))),
       h('tbody', {}, rawRows))      ,
 
     deleteControl(s)

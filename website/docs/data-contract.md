@@ -11,7 +11,8 @@ The server is PHP and MariaDB on thor. There is one device, `NM-0001`, and no lo
 ### Endpoint
 
     POST https://thor.cnt.sast.ca/~lantiveros1t1251/noise/api/readings.php
-    (plain HTTP on port 80 also works, for testing only)
+    The device uses plain HTTP on port 80 (unencrypted TCP), which is the decision for the prototype.
+    HTTPS also works from a computer. The device key and the readings are not encrypted over the cellular link.
 
 Headers: `Content-Type: application/json`, `X-Device-Key: <the device key, ask Lovelyn>`, `Content-Length`, `Connection: close`.
 The device key goes in the header, never in the body or in Git.
@@ -28,7 +29,7 @@ A single reading can also be sent flat: `{"device_id":"NM-0001","ts":"...","db":
 - `db`: number from 0 to 200. Required.
 - `lat` and `lon`: both or neither. Leave both out while there is no GNSS fix.
 - `clipped`: true or false, optional. True when the microphone maxed out.
-- Up to 10,000 readings per request and 2 MB per body. Sending a batch of 30 to 60 readings is a good size for the XBee.
+- Up to 10,000 readings per request and 2 MB per body. Any batch size from 1 reading up is fine. The batch size is a device limit, not a server one. About 30 readings every 30 s is the target, but a smaller batch works too.
 - Re-sending a reading with the same `device_id` and `ts` is safe, it is counted as a duplicate.
 
 ### Replies
@@ -56,7 +57,15 @@ A request counts as delivered only when the status is 200. If it is not, keep th
 
     {"device_id":"NM-0001","readings":[...]}
 
-`Content-Length` must be the exact byte count of the body.
+Lines end with CR LF (`\r\n`), and a blank line separates the headers from the body. `Content-Length` must be the exact byte count of the body.
+
+### Test from a computer first
+
+    curl -i -X POST "https://thor.cnt.sast.ca/~lantiveros1t1251/noise/api/readings.php" \
+      -H "Content-Type: application/json" -H "X-Device-Key: <key>" \
+      -d '{"device_id":"NM-0001","ts":"2026-11-09T17:30:00Z","db":52.4}'
+
+Expected: `200` with `"accepted":1`. The reading then appears as a session on the website.
 
 ### Device key
 
@@ -68,9 +77,9 @@ the `X-Device-Key` header. Without it anyone who knows a `device_id` could post 
 | Code | Meaning | What the device should do |
 |---|---|---|
 | 200 | Stored (some readings may be listed under `rejected`) | Delete the buffered readings |
-| 400 | Every reading was invalid, or the body is not valid JSON | Do not retry the same data |
-| 401 | Missing or wrong device key | Do not retry, check the key stored in the firmware |
-| 404 | Unknown `device_id` | Do not retry, the device is not registered |
+| 400 | Every reading was invalid, or the body is not valid JSON | Drop that batch and carry on. Resending it can never succeed, and it would block the readings behind it |
+| 401 | Missing or wrong device key | Keep the readings. This is a setup problem, so check the key in the firmware, and retry slowly (every 30 s at most) |
+| 404 | Unknown `device_id` | Keep the readings, check the device ID, and retry slowly |
 | 5xx / no response | Server or network problem | Keep the data and retry |
 
 Order inside a request does not matter, the server sorts by `ts`. Uploading buffered data after being offline is
@@ -99,8 +108,10 @@ Computed on the server from the raw per-second readings, per session and per min
 | `l10`, `l50`, `l90` | Level exceeded for 10%, 50% and 90% of the time |
 
 Per-minute rows carry `minute_start`, `leq`, `lmax` and `n` (the number of readings in that minute).
-Whether levels are A-weighted (ISO 1996-2 uses A-weighted levels) is not decided yet, so the site labels them
-as plain dB.
+Levels are **A-weighted** (ISO 1996-2 uses A-weighted levels). The device filters the audio, averages the squared
+samples over each second and converts to dB once, so `db` is the A-weighted equivalent level over that second, LAeq in
+dB(A). Where the table above says Leq, Lmax and so on, read LAeq, LAmax and so on. The calibration offset on the device
+still has to be checked against a reference meter.
 
 ## Server to web app
 
@@ -130,9 +141,8 @@ clipped readings, no position). Delete needs the separate `admin_key`, which the
 ## Phone and device (Bluetooth)
 
 Not part of the server. The messages between the mobile app and the XBee (status, set time, set location) are
-defined in Sadie's Bluetooth protocol document in the app repository.
+defined in Bluetooth protocol document in the app repository.
 
 ## Not decided yet
 
-- How the device handles the server certificate over HTTPS (HTTP on port 80 works for testing only).
-- Whether the device sends one reading per request or batches of about 30 to 60.
+- Batch size on the device. It is 5 for testing. A larger batch needs the firmware to send in chunks (or use RTS/CTS flow control), waiting for each socket-send status, so the XBee's buffers do not overflow.
