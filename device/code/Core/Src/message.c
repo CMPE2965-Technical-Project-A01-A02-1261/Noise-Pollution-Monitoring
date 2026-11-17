@@ -321,6 +321,10 @@ void StatusResponse(void){
 	}
 	SendBLE((const uint8_t *)msg, length);
 
+	//recording state, 1 while recording, 0 when stopped
+	length = (uint8_t)snprintf(msg, sizeof(msg), "REC %u", Recording ? 1u : 0u);
+	SendBLE((const uint8_t *)msg, length);
+
 	//cellular bars, the AI/DB responses are handled in the EXTI callback
 	GetCell = false;
 	while (!SendATCommand("AI"));
