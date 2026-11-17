@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.anonymous.NoiseSensorMonitoring"
+      "bundleIdentifier": "com.anonymous.NoiseSensorMonitoring",
+      "appleTeamId": "ULA334J64C"
     },
     "android": {
       "adaptiveIcon": {
@@ -46,6 +47,12 @@
           "isBleRequired": true,
           "neverForLocation": true,
           "bluetoothAlwaysPermission": "Allow app to connect to bluetooth devices"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to send your location to the noise monitor when it has no GPS fix."
         }
       ],
       "./plugins/withIOSSceneLifecycle"

@@ -13,9 +13,11 @@ export interface DeviceStatus {
     satellites?: number;
     /** Recording duration as HH:MM:SS, or null when the device is not recording. */
     recordingTime?: string | null;
+    /** Whether the device is recording ("REC 1" / "REC 0"). */
+    recording?: boolean;
 }
 
-const STATUS_PATTERN = /^\s*(BATT|CELL|GNSS|TIME)\s*:?\s*(.*?)\s*$/i;
+const STATUS_PATTERN = /^\s*(BATT|CELL|GNSS|TIME|REC)\b\s*:?\s*(.*?)\s*$/i;
 
 function parseCount(value: string): number | undefined {
     const match = /\d+/.exec(value);
@@ -55,6 +57,13 @@ export function parseStatusMessage(message: string): Partial<DeviceStatus> | nul
                 }
                 break;
             }
+            case 'REC': {
+                const recording = parseCount(value);
+                if (recording !== undefined) {
+                    update.recording = recording !== 0;
+                }
+                break;
+            }
             case 'TIME':
                 update.recordingTime = /^0*$/.test(value.replace(/[:\s]/g, '')) ? null : value;
                 break;
@@ -62,4 +71,14 @@ export function parseStatusMessage(message: string): Partial<DeviceStatus> | nul
     }
 
     return Object.keys(update).length > 0 ? update : null;
+}
+
+/** True for the device's "REQUEST TIME" message, sent when its clock is not set. */
+export function isTimeRequest(message: string): boolean {
+    return message.split(/[\r\n]+/).some((line) => /^\s*REQUEST\s+TIME\s*$/i.test(line));
+}
+
+/** True for the device's "REQUEST POS" message, sent when it has no GNSS fix or position. */
+export function isPositionRequest(message: string): boolean {
+    return message.split(/[\r\n]+/).some((line) => /^\s*REQUEST\s+POS\s*$/i.test(line));
 }

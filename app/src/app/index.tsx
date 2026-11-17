@@ -3,7 +3,12 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import Status, { type StatusTone } from "../components/status";
 import { GetStatus } from "../services/GetStatus";
 import type { XBeeApiFrame, XBeeBluetoothDevice } from "../services/BLEService";
-import { parseStatusMessage, type DeviceStatus } from "../services/statusMessages";
+import {
+  isPositionRequest,
+  isTimeRequest,
+  parseStatusMessage,
+  type DeviceStatus,
+} from "../services/statusMessages";
 
 const SIGNAL_POLL_INTERVAL_MS = 5000;
 const CELL_BARS_MAX = 5;
@@ -33,6 +38,29 @@ function gnssTone(satellites: number): StatusTone {
   return "good";
 }
 
+/**
+ * The Recording card. REC says whether the device is recording; TIME is the
+ * session length. Firmware without REC is judged from TIME alone.
+ */
+function recordingCard({ recording, recordingTime }: DeviceStatus): {
+  value?: string;
+  detail?: string;
+  tone?: StatusTone;
+} {
+  const isRecording = recording ?? (recordingTime === undefined ? undefined : recordingTime !== null);
+  if (isRecording === undefined) {
+    return {};
+  }
+  if (!isRecording) {
+    return { value: "Stopped", detail: "Press the device button to record" };
+  }
+  return {
+    value: "Recording",
+    detail: recordingTime ? `${recordingTime} elapsed` : undefined,
+    tone: "good",
+  };
+}
+
 function formatHex(value: number): string {
   return `0x${value.toString(16).padStart(2, "0").toUpperCase()}`;
 }
@@ -51,7 +79,11 @@ export default function Index() {
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus>({});
   const [statusUpdatedAt, setStatusUpdatedAt] = useState<Date | null>(null);
   const [showRawFrames, setShowRawFrames] = useState(false);
+  /** True once the phone's position has been sent to the device on this connection. */
+  const [positionSent, setPositionSent] = useState(false);
   const unsubscribeFromFrames = useRef<(() => void) | undefined>(undefined);
+  const isSendingPosition = useRef(false);
+  const hasShownLocationError = useRef(false);
 
   useEffect(() => () => unsubscribeFromFrames.current?.(), []);
 
@@ -117,12 +149,50 @@ export default function Index() {
     setConnectedDevice(null);
     setReceivedFrames([]);
     setDeviceStatus({});
+    setPositionSent(false);
     setStatusUpdatedAt(null);
     try {
-      const { connectToXBee, subscribeToXBeeFrames } = await import("../services/BLEService");
+      const { connectToXBee, sendPositionToXBee, sendTimeToXBee, subscribeToXBeeFrames } =
+        await import("../services/BLEService");
+      hasShownLocationError.current = false;
+
+      // Reply to "REQUEST POS" with the phone's position. Only one reply at a
+      // time, since the device asks again on every status refresh.
+      const sendPhonePosition = async () => {
+        if (isSendingPosition.current) {
+          return;
+        }
+        isSendingPosition.current = true;
+        try {
+          const { getPhoneLocation } = await import("../services/PhoneLocation");
+          const { latitude, longitude } = await getPhoneLocation();
+          await sendPositionToXBee(latitude, longitude);
+          setPositionSent(true);
+        } catch (error) {
+          console.error("Could not send the position to the XBee:", error);
+          if (!hasShownLocationError.current) {
+            hasShownLocationError.current = true;
+            Alert.alert(
+              "Couldn't send location",
+              error instanceof Error ? error.message : "Unable to read the phone's location."
+            );
+          }
+        } finally {
+          isSendingPosition.current = false;
+        }
+      };
+
       unsubscribeFromFrames.current?.();
       unsubscribeFromFrames.current = subscribeToXBeeFrames((frame) => {
         setReceivedFrames((frames) => [frame, ...frames].slice(0, 20));
+        if (frame.data !== undefined && isTimeRequest(frame.data)) {
+          void sendTimeToXBee().catch((error: unknown) =>
+            console.error("Could not send the time to the XBee:", error)
+          );
+        }
+        if (frame.data !== undefined && isPositionRequest(frame.data)) {
+          void sendPhonePosition();
+        }
         const update = frame.data !== undefined ? parseStatusMessage(frame.data) : null;
         if (update) {
           setDeviceStatus((status) => ({ ...status, ...update }));
@@ -211,29 +281,22 @@ export default function Index() {
                 deviceStatus.satellites === undefined
                   ? undefined
                   : deviceStatus.satellites === 0
-                    ? "No fix"
+                    ? positionSent
+                      ? "Position sent"
+                      : "No fix"
                     : deviceStatus.satellites < 4
                       ? "Weak fix"
                       : "Locked"
               }
-              tone={deviceStatus.satellites !== undefined ? gnssTone(deviceStatus.satellites) : undefined}
-            />
-            <Status
-              label="Recording"
-              value={
-                deviceStatus.recordingTime === undefined
+              tone={
+                deviceStatus.satellites === undefined
                   ? undefined
-                  : deviceStatus.recordingTime ?? "Stopped"
+                  : deviceStatus.satellites === 0 && positionSent
+                    ? "good"
+                    : gnssTone(deviceStatus.satellites)
               }
-              detail={
-                deviceStatus.recordingTime === undefined
-                  ? undefined
-                  : deviceStatus.recordingTime === null
-                    ? "Not recording"
-                    : "Session duration"
-              }
-              tone={deviceStatus.recordingTime ? "good" : "neutral"}
             />
+            <Status label="Recording" {...recordingCard(deviceStatus)} />
             <Status
               label="Bluetooth"
               value={signalStrength !== null ? bluetoothQuality(signalStrength).label : undefined}
