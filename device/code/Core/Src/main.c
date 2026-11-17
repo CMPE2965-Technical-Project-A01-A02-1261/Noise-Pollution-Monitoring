@@ -547,14 +547,16 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin) {
 	uint8_t value = (uint8_t)api_status.data[3];
 	if (api_status.data[0] == 'A' && api_status.data[1] == 'I')
 	{
+		/* AI 0 = connected to the network: ask for the signal strength.
+		 * Anything else is not connected, so no bars. */
 		if (value == 0)
 		{
-			Cell = 9;
-			GetCell = true;
+			SendATCommand("DB");
 		}
 		else
 		{
-			SendATCommand("DB");
+			Cell = 0;
+			GetCell = true;
 		}
 	}
 	else if (api_status.data[0] == 'D' && api_status.data[1] == 'B')
