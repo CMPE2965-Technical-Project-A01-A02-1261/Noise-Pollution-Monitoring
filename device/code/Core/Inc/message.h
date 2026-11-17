@@ -29,7 +29,6 @@ extern volatile bool NetworkTimeValid;
 extern volatile uint32_t NetworkTimeTick;
 extern volatile uint32_t NetworkTimeRaw;
 
-extern bool Recording;
 extern uint32_t RecordStartTick;
 
 extern bool TimeSet;

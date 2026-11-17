@@ -204,6 +204,7 @@ int main(void)
         if (Sound_IsRunning()) {
           Sound_Stop();
         } else {
+          RecordStartTick = HAL_GetTick();
           Sound_Start(&hi2s1);
         }
       }
