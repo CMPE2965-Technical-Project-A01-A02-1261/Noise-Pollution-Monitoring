@@ -68,10 +68,11 @@ function warnings(session) {
   return out;
 }
 
-function stat(label, value, unit) {
-  return h('div', { class: 'stat' },
+function stat(label, value, unit, tone, note) {
+  return h('div', tone ? { class: 'stat stat-main', style: `--tone:${tone}` } : { class: 'stat' },
     h('div', { class: 'stat-label' }, label),
-    h('div', { class: 'stat-value' }, value, unit ? h('span', { class: 'unit' }, ` ${unit}`) : null));
+    h('div', { class: 'stat-value' }, value, unit ? h('span', { class: 'unit' }, ` ${unit}`) : null),
+    note ? h('div', { class: 'stat-note' }, note) : null);
 }
 
 function buildChart(readings) {
@@ -93,6 +94,12 @@ function buildChart(readings) {
   const chart = svg('svg', {
     viewBox: `0 0 ${W} ${H}`, class: 'chart', role: 'img', 'aria-label': 'Sound level over time',
   });
+
+  // Faint bands behind the line for the quiet, moderate and loud ranges
+  for (const [lo, hi, level] of [[-Infinity, 55, 0], [55, 70, 60], [70, Infinity, 80]]) {
+    const a = Math.max(lo, yMin), b = Math.min(hi, yMax);
+    if (b > a) chart.append(svg('rect', { x: left, y: y(b), width: plotW, height: y(a) - y(b), fill: levelColor(level), 'fill-opacity': 0.1 }));
+  }
 
   // Horizontal grid lines with dB labels
   for (let v = yMin; v <= yMax; v += 10) {
@@ -177,9 +184,24 @@ function downloadCsv(session) {
 
 // Colour for a sound level. The 55 and 70 dB limits are placeholders until the team picks its own.
 function levelColor(db) {
-  if (db < 55) return '#2e8b57';   // quiet
-  if (db < 70) return '#e0a100';   // moderate
-  return '#c43a31';                // loud
+  if (db < 55) return '#1f8a70';   // quiet
+  if (db < 70) return '#d9961a';   // moderate
+  return '#cf3f2f';                // loud
+}
+
+function levelLabel(db) {
+  if (db < 55) return 'Quiet';
+  if (db < 70) return 'Moderate';
+  return 'Loud';
+}
+
+// A small bar for the list: the fill is LAeq and the tick is LAmax, on a 30 to 110 dB(A) scale.
+const METER_MIN = 30, METER_MAX = 110;
+function meter(leq, lmax) {
+  const pct = (v) => Math.max(0, Math.min(100, ((v - METER_MIN) / (METER_MAX - METER_MIN)) * 100));
+  return h('div', { class: 'meter', title: `LAeq ${leq.toFixed(1)} dB(A), LAmax ${lmax.toFixed(1)} dB(A)` },
+    h('span', { class: 'meter-fill', style: `width:${pct(leq)}%;background:${levelColor(leq)}` }),
+    h('span', { class: 'meter-peak', style: `left:${pct(lmax)}%` }));
 }
 
 const MAX_MAP_POINTS = 1000;       // thin out very long sessions so the map stays fast
@@ -252,9 +274,9 @@ function minuteTable(readings) {
       h('td', {}, m.leq.toFixed(1)),
       h('td', {}, m.lmax.toFixed(1)),
       h('td', {}, m.n)));
-  return h('table', {},
+  return h('div', { class: 'table-wrap' }, h('table', {},
     h('thead', {}, h('tr', {}, h('th', {}, 'Minute'), h('th', {}, 'LAeq (dB(A))'), h('th', {}, 'LAmax (dB(A))'), h('th', {}, 'Readings'))),
-    h('tbody', {}, rows));
+    h('tbody', {}, rows)));
 }
 
 // A map pin (teardrop) in the given colour. With count > 1 the pin shows how many sessions it holds.
@@ -459,11 +481,14 @@ async function showList() {
         h('td', { class: 'location-cell' },
         h('span', { class: 'loc-main' }, formatLocation(s.location)),
         s.location ? h('span', { class: 'loc-sub', 'data-lat': s.location.lat, 'data-lon': s.location.lon }) : null),
-      h('td', {}, s.summary.leq.toFixed(1)),
-      h('td', {}, s.summary.lmax.toFixed(1)),
+      h('td', {}, h('span', { class: 'num' }, s.summary.leq.toFixed(1)), meter(s.summary.leq, s.summary.lmax)),
+      h('td', {}, h('span', { class: 'num' }, s.summary.lmax.toFixed(1))),
       h('td', {}, notes(s))));
 
-  show(sessionsMap(sessions), h('table', {}, h('thead', {}, header), h('tbody', {}, rows)));
+  show(sessionsMap(sessions),
+    h('h2', {}, 'Recording sessions'),
+    h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, header), h('tbody', {}, rows))),
+    h('p', { class: 'meta' }, 'The bar under each LAeq shows the average level on a 30 to 110 dB(A) scale. The tick marks LAmax.'));
   fillPlaceNames();
 }
 
@@ -493,7 +518,7 @@ async function showSession(id) {
     warnings(s).map((w) => h('div', { class: 'warning' }, w)),
 
     h('div', { class: 'stats' },
-      stat('LAeq', sum.leq.toFixed(1), 'dB(A)'), stat('LAmax', sum.lmax.toFixed(1), 'dB(A)'),
+      stat('LAeq', sum.leq.toFixed(1), 'dB(A)', levelColor(sum.leq), levelLabel(sum.leq)), stat('LAmax', sum.lmax.toFixed(1), 'dB(A)'),
       stat('LAmin', sum.lmin.toFixed(1), 'dB(A)'), stat('LA10', sum.l10.toFixed(1), 'dB(A)'),
       stat('LA50', sum.l50.toFixed(1), 'dB(A)'), stat('LA90', sum.l90.toFixed(1), 'dB(A)'),
       stat('Readings', String(s.readings.length))),
@@ -512,9 +537,9 @@ async function showSession(id) {
     h('h2', {}, 'Raw data'),
     h('div', { class: 'toolbar' }, csvButton),
     h('p', { class: 'meta' }, `First ${RAW_ROWS_SHOWN} of ${s.readings.length} readings.`),
-    h('table', {},
+    h('div', { class: 'table-wrap' }, h('table', {},
       h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB(A)'), h('th', {}, 'Mic maxed out'))),
-      h('tbody', {}, rawRows))      ,
+      h('tbody', {}, rawRows))),
 
     deleteControl(s)
     );
