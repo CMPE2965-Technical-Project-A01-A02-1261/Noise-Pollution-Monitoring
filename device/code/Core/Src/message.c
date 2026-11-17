@@ -1,6 +1,7 @@
 #include "message.h"
 #include "battery.h"
 #include "clock.h"
+#include "sound.h"
 #include "uplink.h"
 
 #include <math.h>
@@ -28,8 +29,8 @@ volatile bool NetworkTimeValid = false;
 volatile uint32_t NetworkTimeTick = 0;
 volatile uint32_t NetworkTimeRaw = 0;
 
-/* Recording session state, used for the TIME status packet. */
-bool Recording = false;
+/* When the current recording session started (set by the B1 handler), for
+ * the TIME status packet. Whether it is recording is Sound_IsRunning(). */
 uint32_t RecordStartTick = 0;
 
 /* Wall clock time (UTC) received from the app ("DT YYYY-MM-DDTHH:MM:SS").
@@ -46,6 +47,30 @@ bool LatSet = false;
 bool LngSet = false;
 int32_t LatitudeE7 = 0;
 int32_t LongitudeE7 = 0;
+
+static bool fallback_set = false;
+static int32_t fallback_lat_e7;
+static int32_t fallback_lon_e7;
+
+void Position_SetFallback(int32_t lat_e7, int32_t lon_e7){
+	fallback_lat_e7 = lat_e7;
+	fallback_lon_e7 = lon_e7;
+	fallback_set = true;
+}
+
+bool Position_Get(int32_t *lat_e7, int32_t *lon_e7){
+	if (LatSet && LngSet){
+		*lat_e7 = LatitudeE7;
+		*lon_e7 = LongitudeE7;
+		return true;
+	}
+	if (fallback_set){
+		*lat_e7 = fallback_lat_e7;
+		*lon_e7 = fallback_lon_e7;
+		return true;
+	}
+	return false;
+}
 
 static bool ParseDateTime(const char *str, DateTime_t *dt);
 static void HandleGNSS(const char *data, uint16_t length, uint32_t tick);
@@ -285,7 +310,8 @@ void StatusResponse(void){
 	SendBLE((const uint8_t *)msg, length);
 
 	//recording time, HH:MM:SS since the session started (0 if not recording)
-	if (Recording){
+	bool recording = Sound_IsRunning();
+	if (recording){
 		uint32_t elapsed = (HAL_GetTick() - RecordStartTick) / 1000u;
 		length = (uint8_t)snprintf(msg, sizeof(msg), "TIME %02lu:%02lu:%02lu",
 		                           (unsigned long)(elapsed / 3600u),
@@ -295,6 +321,10 @@ void StatusResponse(void){
 	else{
 		length = (uint8_t)snprintf(msg, sizeof(msg), "TIME 0");
 	}
+	SendBLE((const uint8_t *)msg, length);
+
+	//recording state, 1 while recording, 0 when stopped
+	length = (uint8_t)snprintf(msg, sizeof(msg), "REC %u", recording ? 1u : 0u);
 	SendBLE((const uint8_t *)msg, length);
 
 	//cellular bars, the AI/DB responses are handled in the EXTI callback

@@ -29,7 +29,6 @@ extern volatile bool NetworkTimeValid;
 extern volatile uint32_t NetworkTimeTick;
 extern volatile uint32_t NetworkTimeRaw;
 
-extern bool Recording;
 extern uint32_t RecordStartTick;
 
 extern bool TimeSet;
@@ -41,6 +40,14 @@ extern bool LngSet;
 /* Degrees * 10^7, as the XBee GNSS reports them (float loses ~1 m). */
 extern int32_t LatitudeE7;
 extern int32_t LongitudeE7;
+
+/* Fixed position used only until a real one (app or GNSS) arrives, e.g. the
+ * static test position. It does not set LatSet/LngSet, so the device still
+ * sends "REQUEST POS". */
+void Position_SetFallback(int32_t lat_e7, int32_t lon_e7);
+/* The current position: the app/GNSS one if both coordinates arrived,
+ * otherwise the fallback. Returns false if there is neither. */
+bool Position_Get(int32_t *lat_e7, int32_t *lon_e7);
 
 bool SendBLE(const uint8_t *msg, uint8_t msg_length);
 bool SendATCommand(const char * command);

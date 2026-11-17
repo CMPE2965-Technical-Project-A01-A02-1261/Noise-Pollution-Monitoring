@@ -57,8 +57,8 @@
 #define BUTTON_DEBOUNCE_MS 250u
 #define BUTTON_CONFIRM_MS 20u
 
-/* TESTING: skip GNSS and use a fixed position, so uploads can be tested
- * without a fix. Set to 0 to restore GNSS. */
+/* TESTING: skip GNSS and use a fixed position until the app sends one, so
+ * uploads can be tested without a fix. Set to 0 to restore GNSS. */
 #define TEST_STATIC_POSITION 1
 #define TEST_LATITUDE_E7 537728000    /* 53.7728 */
 #define TEST_LONGITUDE_E7 -1133899000 /* -113.3899 */
@@ -178,10 +178,8 @@ int main(void)
 
   uint32_t last_battery_poll = HAL_GetTick();
 #if TEST_STATIC_POSITION
-  LatitudeE7 = TEST_LATITUDE_E7;
-  LongitudeE7 = TEST_LONGITUDE_E7;
-  LatSet = true;
-  LngSet = true;
+  /* Only a fallback: the app (or GNSS) position replaces it once received. */
+  Position_SetFallback(TEST_LATITUDE_E7, TEST_LONGITUDE_E7);
 #else
   uint32_t next_gnss_poll = HAL_GetTick() + GNSS_STARTUP_DELAY_MS;
   uint32_t gnss_request_tick = 0;
@@ -206,6 +204,7 @@ int main(void)
         if (Sound_IsRunning()) {
           Sound_Stop();
         } else {
+          RecordStartTick = HAL_GetTick();
           Sound_Start(&hi2s1);
         }
       }
@@ -547,14 +546,16 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin) {
 	uint8_t value = (uint8_t)api_status.data[3];
 	if (api_status.data[0] == 'A' && api_status.data[1] == 'I')
 	{
+		/* AI 0 = connected to the network: ask for the signal strength.
+		 * Anything else is not connected, so no bars. */
 		if (value == 0)
 		{
-			Cell = 9;
-			GetCell = true;
+			SendATCommand("DB");
 		}
 		else
 		{
-			SendATCommand("DB");
+			Cell = 0;
+			GetCell = true;
 		}
 	}
 	else if (api_status.data[0] == 'D' && api_status.data[1] == 'B')

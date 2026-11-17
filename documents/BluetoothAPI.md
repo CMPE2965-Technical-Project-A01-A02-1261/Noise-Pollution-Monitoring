@@ -2,13 +2,15 @@
 
 ### Status message
 "STATUS" sent from app to device
-device responds with 4 - 6 packets (Battery, recording time, cellular, and gnss,
-optional packet to request time and position from device)
+device responds with 5 - 7 packets (Battery, recording time, recording state, cellular,
+and gnss, optional packet to request time and position from device)
 
 "BATT ###" battery percentage message
 "CELL #" number of cell signal bars
 "GNSS ##" number of GPS sattelites providing lock
 "TIME HH:MM:SS" duration device has been recording this session (0 if not recording) 
+"REC #" whether the device is recording: 1 if recording, 0 if not (recording is
+started and stopped with the button on the device)
 
 "REQUEST TIME" device asks app for current time
 
