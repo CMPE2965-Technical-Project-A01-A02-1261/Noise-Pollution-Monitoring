@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "NPM")(type "KiCad")(uri "${KIPRJMOD}/NPM.kicad_sym")(options "")(descr "Noise Pollution Monitor module symbols"))
+)

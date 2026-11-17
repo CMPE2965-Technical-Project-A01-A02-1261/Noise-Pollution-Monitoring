@@ -8,3 +8,21 @@ website/data/
 
 # secrets must never be committed
 noise-config.php
+device/code/Core/Inc/device_secrets.h
+
+# Firmware build output. Images, object files, listings and preprocessed
+# sources can all contain the device key from device_secrets.h.
+*.elf
+device/code/build/
+device/code/Debug/
+device/code/Release/
+device/**/*.o
+device/**/*.obj
+device/**/*.bin
+device/**/*.hex
+device/**/*.srec
+device/**/*.map
+device/**/*.list
+device/**/*.lst
+device/**/*.i
+device/**/*.ii

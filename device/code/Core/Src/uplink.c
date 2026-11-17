@@ -1,0 +1,541 @@
+/* Sends the one second sound readings to the server over the XBee's cellular
+ * connection.
+ *
+ * Readings are buffered with the HAL tick they were taken at and only sent
+ * once the clock has a real UTC time (from the cellular network, GNSS or the
+ * phone), so readings
+ * taken before that get correct timestamps too.
+ *
+ * Every UPLINK_INTERVAL_MS the oldest readings go out as one HTTP POST,
+ * using XBee API socket frames:
+ *   0x40 Socket Create (TCP)        -> 0xC0 response gives the socket ID
+ *   0x42 Socket Connect (hostname)  -> 0xC2 response, then 0xCF state
+ *                                      "connected" once TCP is up
+ *   0x44 Socket Send (request)      -> 0x89 TX status for each chunk; the
+ *                                      next chunk waits for it
+ *   0xCD Socket Receive (response)  -> read the HTTP status, and for 200
+ *                                      look for "accepted"
+ *   0x43 Socket Close               -> 0xC3 response
+ * What happens to the batch depends on the reply (see the data contract):
+ *   200                     delivered, readings removed
+ *   400                     rejected, readings dropped (resending can't help)
+ *   401, 404                key or device ID wrong, readings kept, slow retry
+ *   anything else / no reply  readings kept, retry after UPLINK_RETRY_MS
+ * The server ignores readings it already has (same device and timestamp),
+ * so a resend after a lost response is harmless.
+ *
+ * Nothing here blocks except the UART writes: Uplink_Process advances the
+ * request from the main loop and Uplink_HandleFrame feeds it the responses. */
+
+#include "uplink.h"
+
+#include "clock.h"
+#include "device_secrets.h"
+#include "message.h"
+
+#include <stdio.h>
+#include <string.h>
+
+/* Readings held while waiting for a time or a connection: 30 minutes. */
+#define UPLINK_BUFFER_SIZE 1800u
+/* Readings per request. Also how far a backlog is worked off per request. */
+#define UPLINK_MAX_BATCH 30u
+/* Longest JSON for one reading, plus the wrapper. */
+#define UPLINK_READING_MAX_JSON 112u
+#define UPLINK_BODY_SIZE (64u + UPLINK_MAX_BATCH * UPLINK_READING_MAX_JSON)
+/* Socket Send payload per API frame (frame length is limited to 255). Each
+ * chunk is sent only after the XBee's TX status for the one before: sent back
+ * to back, a few KB overran its buffers (TX status 0x32). */
+#define UPLINK_CHUNK 240u
+
+/* Give up on a request after this long (LTE-M connections are slow). */
+#define UPLINK_REQUEST_TIMEOUT_MS 60000u
+#define UPLINK_CLOSE_TIMEOUT_MS 5000u
+/* Wait before trying again after a failure. */
+#define UPLINK_RETRY_MS 30000u
+/* Wait after a 401 or 404: a wrong key or device ID won't fix itself, but
+ * keep trying in case the server side is corrected. */
+#define UPLINK_SLOW_RETRY_MS 600000u /* 10 minutes */
+
+/* XBee API frame types and values used here. */
+#define FRAME_SOCKET_CREATE 0x40
+#define FRAME_SOCKET_CONNECT 0x42
+#define FRAME_SOCKET_CLOSE 0x43
+#define FRAME_SOCKET_SEND 0x44
+#define FRAME_TX_STATUS 0x89
+#define FRAME_SOCKET_CREATE_RESP 0xC0
+#define FRAME_SOCKET_CONNECT_RESP 0xC2
+#define FRAME_SOCKET_CLOSE_RESP 0xC3
+#define FRAME_SOCKET_RECEIVE 0xCD
+#define FRAME_SOCKET_STATE 0xCF
+#define SOCKET_PROTOCOL_TCP 0x01
+#define SOCKET_ADDR_HOSTNAME 0x01
+#define SOCKET_STATE_CONNECTED 0x00
+#define SOCKET_STATE_TRANSPORT_CLOSED 0x03
+
+#define READING_CLIPPED 0x01u
+#define READING_HAS_POS 0x02u
+
+typedef struct {
+	uint32_t tick;
+	int32_t lat_e7;
+	int32_t lon_e7;
+	int16_t db_x10;
+	uint8_t flags;
+} Uplink_Reading;
+
+/* What to do with the batch once the request ends. */
+typedef enum {
+	UPLINK_RESULT_RETRY,      /* keep, retry after UPLINK_RETRY_MS */
+	UPLINK_RESULT_DELIVERED,  /* 200 with "accepted": remove */
+	UPLINK_RESULT_REJECTED,   /* 400: drop */
+	UPLINK_RESULT_SLOW_RETRY  /* 401/404: keep, retry after UPLINK_SLOW_RETRY_MS */
+} Uplink_Result;
+
+typedef enum {
+	UPLINK_IDLE,
+	UPLINK_CREATING,     /* waiting for 0xC0 */
+	UPLINK_CONNECTING,   /* waiting for 0xC2 */
+	UPLINK_HANDSHAKE,    /* waiting for 0xCF connected */
+	UPLINK_SENDING,      /* sending the request, waiting for 0x89 per chunk */
+	UPLINK_RESPONSE,     /* request sent, reading the reply */
+	UPLINK_CLOSING       /* waiting for 0xC3 */
+} Uplink_State;
+
+static Uplink_Reading readings[UPLINK_BUFFER_SIZE];
+static uint32_t readings_tail;  /* oldest unsent */
+static uint32_t readings_count;
+static uint32_t dropped_count;
+static uint32_t inflight;       /* readings from the tail in the current request */
+
+static Uplink_State state;
+static uint8_t socket_id;
+static uint8_t pending_frame_id;
+static uint8_t send_frame_id;   /* frame ID of the chunk waiting for 0x89 */
+static uint32_t request_start;
+static uint32_t close_start;
+static uint32_t next_attempt;
+static Uplink_Result result;
+
+/* For checking from the debugger: the last HTTP status received (0 if the
+ * request failed before one arrived), and batches/readings dropped after a
+ * 400. A run of 400s points at a firmware bug in the request. */
+static volatile uint16_t last_http_status;
+static volatile uint32_t rejected_batch_count;
+static volatile uint32_t rejected_reading_count;
+
+/* Response matching, across Socket Receive frames. */
+static char status_line[13];
+static uint8_t status_line_len;
+static uint8_t accepted_match;
+static bool accepted_found;
+
+static char body[UPLINK_BODY_SIZE];
+/* The request being sent: header then body, sent_length bytes done. */
+static char header[256];
+static size_t header_length;
+static size_t body_length;
+static size_t sent_length;
+
+void Uplink_AddReading(const Sound_Reading *reading)
+{
+	if (!reading->valid) {
+		return;
+	}
+	if (readings_count >= UPLINK_BUFFER_SIZE) {
+		dropped_count++;
+		return;
+	}
+
+	Uplink_Reading *r = &readings[(readings_tail + readings_count) % UPLINK_BUFFER_SIZE];
+	float db = reading->db;
+	if (db < 0.0f) db = 0.0f;
+	if (db > 200.0f) db = 200.0f;
+	r->tick = reading->tick;
+	r->db_x10 = (int16_t)(db * 10.0f + 0.5f);
+	r->flags = reading->clipped ? READING_CLIPPED : 0u;
+	if (LatSet && LngSet) {
+		r->lat_e7 = LatitudeE7;
+		r->lon_e7 = LongitudeE7;
+		r->flags |= READING_HAS_POS;
+	}
+	readings_count++;
+}
+
+uint32_t Uplink_GetPendingCount(void)
+{
+	return readings_count;
+}
+
+uint32_t Uplink_GetDroppedCount(void)
+{
+	return dropped_count;
+}
+
+bool Uplink_IsIdle(void)
+{
+	return state == UPLINK_IDLE;
+}
+
+/* Degrees * 10^7 as a JSON number with 7 decimals. */
+static int FormatE7(char *buf, size_t size, int32_t v)
+{
+	uint32_t a = v < 0 ? (uint32_t)(-(int64_t)v) : (uint32_t)v;
+	return snprintf(buf, size, "%s%lu.%07lu", v < 0 ? "-" : "",
+	                (unsigned long)(a / 10000000u), (unsigned long)(a % 10000000u));
+}
+
+/* Builds the JSON body from the oldest readings. Returns its length and sets
+ * inflight to the number of readings included. */
+static size_t BuildBody(void)
+{
+	size_t len = (size_t)snprintf(body, sizeof(body),
+	                              "{\"device_id\":\"%s\",\"readings\":[", UPLINK_DEVICE_ID);
+	uint32_t n = 0;
+	while (n < readings_count && n < UPLINK_MAX_BATCH &&
+	       len + UPLINK_READING_MAX_JSON + 3u < sizeof(body)) {
+		const Uplink_Reading *r = &readings[(readings_tail + n) % UPLINK_BUFFER_SIZE];
+		int64_t unix_ms;
+		char ts[32];
+		if (!Clock_TickToUnixMs(r->tick, &unix_ms) ||
+		    Clock_FormatIso(unix_ms, ts, sizeof(ts)) == 0) {
+			break;
+		}
+
+		char *p = body + len;
+		size_t room = sizeof(body) - len;
+		int w = snprintf(p, room, "%s{\"ts\":\"%s\",\"db\":%d.%d",
+		                 n > 0 ? "," : "", ts, r->db_x10 / 10, r->db_x10 % 10);
+		if (r->flags & READING_HAS_POS) {
+			w += snprintf(p + w, room - (size_t)w, ",\"lat\":");
+			w += FormatE7(p + w, room - (size_t)w, r->lat_e7);
+			w += snprintf(p + w, room - (size_t)w, ",\"lon\":");
+			w += FormatE7(p + w, room - (size_t)w, r->lon_e7);
+		}
+		w += snprintf(p + w, room - (size_t)w, ",\"clipped\":%s}",
+		              (r->flags & READING_CLIPPED) ? "true" : "false");
+		len += (size_t)w;
+		n++;
+	}
+	len += (size_t)snprintf(body + len, sizeof(body) - len, "]}");
+	inflight = n;
+	return len;
+}
+
+/* Sends the next chunk of the request (header then body) as one Socket Send
+ * frame. Its TX status (0x89) triggers the next chunk. */
+static bool SendNextChunk(void)
+{
+	uint8_t frame[4 + UPLINK_CHUNK];
+	size_t total = header_length + body_length;
+	size_t chunk = total - sent_length;
+	if (chunk > UPLINK_CHUNK) {
+		chunk = UPLINK_CHUNK;
+	}
+	/* Copy from the header and/or body; a chunk can span both. */
+	for (size_t i = 0; i < chunk; i++) {
+		size_t pos = sent_length + i;
+		frame[4 + i] = (uint8_t)(pos < header_length ? header[pos]
+		                                             : body[pos - header_length]);
+	}
+	frame[0] = FRAME_SOCKET_SEND;
+	frame[1] = API_GetNextFrameId();
+	frame[2] = socket_id;
+	frame[3] = 0x00; /* transmit options */
+	send_frame_id = frame[1];
+	if (!Frame(frame, (uint8_t)(4u + chunk))) {
+		return false;
+	}
+	sent_length += chunk;
+	return true;
+}
+
+/* Builds the request and sends its first chunk. */
+static bool SendRequest(void)
+{
+	size_t body_len = BuildBody();
+	if (inflight == 0u) {
+		return false;
+	}
+	int header_len = snprintf(header, sizeof(header),
+	                          "POST %s HTTP/1.1\r\n"
+	                          "Host: %s\r\n"
+	                          "X-Device-Key: %s\r\n"
+	                          "Content-Type: application/json\r\n"
+	                          "Content-Length: %u\r\n"
+	                          "Connection: close\r\n"
+	                          "\r\n",
+	                          UPLINK_PATH, UPLINK_HOST, UPLINK_DEVICE_KEY,
+	                          (unsigned)body_len);
+	if (header_len <= 0 || (size_t)header_len >= sizeof(header)) {
+		return false;
+	}
+	header_length = (size_t)header_len;
+	body_length = body_len;
+	sent_length = 0;
+	state = UPLINK_SENDING;
+	return SendNextChunk();
+}
+
+static void StartClose(void)
+{
+	uint8_t frame[3];
+	frame[0] = FRAME_SOCKET_CLOSE;
+	frame[1] = API_GetNextFrameId();
+	frame[2] = socket_id;
+	pending_frame_id = frame[1];
+	close_start = HAL_GetTick();
+	state = UPLINK_CLOSING;
+	Frame(frame, sizeof(frame));
+}
+
+/* Ends the request and removes, keeps or drops the batch depending on the
+ * result. */
+static void Finish(void)
+{
+	uint32_t now = HAL_GetTick();
+	switch (result) {
+	case UPLINK_RESULT_REJECTED:
+		rejected_batch_count++;
+		rejected_reading_count += inflight;
+		/* fall through: the batch leaves the buffer either way */
+	case UPLINK_RESULT_DELIVERED:
+		readings_tail = (readings_tail + inflight) % UPLINK_BUFFER_SIZE;
+		readings_count -= inflight;
+		/* Work off a backlog right away, otherwise wait for the interval. */
+		next_attempt = readings_count >= UPLINK_MAX_BATCH ? now
+		                                                  : request_start + UPLINK_INTERVAL_MS;
+		break;
+	case UPLINK_RESULT_SLOW_RETRY:
+		next_attempt = now + UPLINK_SLOW_RETRY_MS;
+		break;
+	case UPLINK_RESULT_RETRY:
+	default:
+		next_attempt = now + UPLINK_RETRY_MS;
+		break;
+	}
+	inflight = 0;
+	state = UPLINK_IDLE;
+}
+
+/* Abandons the request; closes the socket if one was created. */
+static void Fail(void)
+{
+	result = UPLINK_RESULT_RETRY;
+	if (state == UPLINK_IDLE || state == UPLINK_CREATING) {
+		Finish();
+	} else if (state != UPLINK_CLOSING) {
+		StartClose();
+	}
+}
+
+static void StartRequest(void)
+{
+	uint8_t frame[3];
+	frame[0] = FRAME_SOCKET_CREATE;
+	frame[1] = API_GetNextFrameId();
+	frame[2] = SOCKET_PROTOCOL_TCP;
+	pending_frame_id = frame[1];
+	request_start = HAL_GetTick();
+	result = UPLINK_RESULT_RETRY;
+	last_http_status = 0;
+	inflight = 0;
+	status_line_len = 0;
+	accepted_match = 0;
+	accepted_found = false;
+	state = UPLINK_CREATING;
+	if (!Frame(frame, sizeof(frame))) {
+		Fail();
+	}
+}
+
+void Uplink_Process(void)
+{
+	uint32_t now = HAL_GetTick();
+	switch (state) {
+	case UPLINK_IDLE:
+		/* GNSS takes the XBee off the cellular network while it searches. */
+		if (readings_count > 0u && Clock_IsSet() && !GNSSPending &&
+		    (int32_t)(now - next_attempt) >= 0) {
+			StartRequest();
+		}
+		break;
+	case UPLINK_CLOSING:
+		if (now - close_start > UPLINK_CLOSE_TIMEOUT_MS) {
+			Finish();
+		}
+		break;
+	default:
+		if (now - request_start > UPLINK_REQUEST_TIMEOUT_MS) {
+			Fail();
+		}
+		break;
+	}
+}
+
+/* Watches the response stream for the status line and "accepted". */
+static void ReadResponse(const char *data, uint16_t length)
+{
+	static const char needle[] = "\"accepted\"";
+	for (uint16_t i = 0; i < length; i++) {
+		char c = data[i];
+		if (status_line_len < sizeof(status_line) - 1u) {
+			status_line[status_line_len++] = c;
+			status_line[status_line_len] = '\0';
+		}
+		if (!accepted_found) {
+			if (c == needle[accepted_match]) {
+				if (++accepted_match == sizeof(needle) - 1u) {
+					accepted_found = true;
+				}
+			} else {
+				accepted_match = (c == needle[0]) ? 1u : 0u;
+			}
+		}
+	}
+}
+
+/* Status code from "HTTP/1.1 200" (or 1.0), or 0 if it hasn't all arrived
+ * yet or isn't a status line. */
+static uint16_t ResponseStatus(void)
+{
+	if (status_line_len < 12u || strncmp(status_line, "HTTP/1.", 7) != 0 ||
+	    status_line[8] != ' ') {
+		return 0;
+	}
+	uint16_t code = 0;
+	for (int i = 9; i < 12; i++) {
+		char c = status_line[i];
+		if (c < '0' || c > '9') {
+			return 0;
+		}
+		code = (uint16_t)(code * 10u + (uint16_t)(c - '0'));
+	}
+	return code;
+}
+
+/* The result for a status code. A 200 only counts once "accepted" has been
+ * seen in the body. */
+static Uplink_Result ResultFor(uint16_t code)
+{
+	switch (code) {
+	case 200:
+		return accepted_found ? UPLINK_RESULT_DELIVERED : UPLINK_RESULT_RETRY;
+	case 400:
+		return UPLINK_RESULT_REJECTED;
+	case 401:
+	case 404:
+		return UPLINK_RESULT_SLOW_RETRY;
+	default:
+		return UPLINK_RESULT_RETRY;
+	}
+}
+
+static void SendConnect(void)
+{
+	uint8_t frame[6 + sizeof(UPLINK_HOST)];
+	frame[0] = FRAME_SOCKET_CONNECT;
+	frame[1] = API_GetNextFrameId();
+	frame[2] = socket_id;
+	frame[3] = (uint8_t)(UPLINK_PORT >> 8);
+	frame[4] = (uint8_t)(UPLINK_PORT & 0xFFu);
+	frame[5] = SOCKET_ADDR_HOSTNAME;
+	memcpy(&frame[6], UPLINK_HOST, sizeof(UPLINK_HOST) - 1u);
+	pending_frame_id = frame[1];
+	state = UPLINK_CONNECTING;
+	if (!Frame(frame, (uint8_t)(6u + sizeof(UPLINK_HOST) - 1u))) {
+		Fail();
+	}
+}
+
+void Uplink_HandleFrame(const API_Status *status)
+{
+	const uint8_t *d = (const uint8_t *)status->data;
+	uint16_t len = status->data_length;
+
+	switch (status->frame_type) {
+	case FRAME_SOCKET_CREATE_RESP: /* socket ID, status */
+		if (state == UPLINK_CREATING && status->frame_id == pending_frame_id && len >= 2u) {
+			if (d[1] == 0x00) {
+				socket_id = d[0];
+				SendConnect();
+			} else {
+				/* e.g. 0x22: not registered to the cell network yet */
+				Fail();
+			}
+		}
+		break;
+
+	case FRAME_SOCKET_CONNECT_RESP: /* socket ID, status */
+		if (state == UPLINK_CONNECTING && status->frame_id == pending_frame_id &&
+		    len >= 2u && d[0] == socket_id) {
+			if (d[1] == 0x00) {
+				state = UPLINK_HANDSHAKE; /* connection started */
+			} else {
+				Fail();
+			}
+		}
+		break;
+
+	case FRAME_SOCKET_STATE: /* socket ID, state (no frame ID) */
+		if (len < 2u || d[0] != socket_id) {
+			break;
+		}
+		if ((state == UPLINK_CONNECTING || state == UPLINK_HANDSHAKE) &&
+		    d[1] == SOCKET_STATE_CONNECTED) {
+			if (!SendRequest()) {
+				Fail();
+			}
+		} else if ((state == UPLINK_SENDING || state == UPLINK_RESPONSE) &&
+		           d[1] == SOCKET_STATE_TRANSPORT_CLOSED) {
+			/* Server finished its reply (Connection: close). */
+			last_http_status = ResponseStatus();
+			result = ResultFor(last_http_status);
+			StartClose();
+		} else if (state != UPLINK_IDLE && state != UPLINK_CLOSING &&
+		           d[1] != SOCKET_STATE_CONNECTED) {
+			Fail(); /* DNS failure, refused, timed out, lost, ... */
+		}
+		break;
+
+	case FRAME_SOCKET_RECEIVE: /* socket ID, status, payload */
+		/* Also while sending: the server may answer an error early. */
+		if ((state == UPLINK_SENDING || state == UPLINK_RESPONSE) &&
+		    len >= 2u && d[0] == socket_id) {
+			ReadResponse(status->data + 2, (uint16_t)(len - 2u));
+			/* Close as soon as the outcome is known: right after the status
+			 * line for an error, or once "accepted" shows up for a 200. */
+			uint16_t code = ResponseStatus();
+			if (code != 0u && (code != 200u || accepted_found)) {
+				last_http_status = code;
+				result = ResultFor(code);
+				StartClose();
+			}
+		}
+		break;
+
+	case FRAME_TX_STATUS: /* status */
+		if (state == UPLINK_SENDING && status->frame_id == send_frame_id &&
+		    len >= 1u) {
+			if (d[0] != 0x00) {
+				Fail();
+			} else if (sent_length < header_length + body_length) {
+				if (!SendNextChunk()) {
+					Fail();
+				}
+			} else {
+				state = UPLINK_RESPONSE; /* whole request sent */
+			}
+		}
+		break;
+
+	case FRAME_SOCKET_CLOSE_RESP: /* socket ID, status (any status ends it) */
+		if (state == UPLINK_CLOSING && status->frame_id == pending_frame_id) {
+			Finish();
+		}
+		break;
+
+	default:
+		break;
+	}
+}
