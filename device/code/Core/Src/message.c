@@ -47,6 +47,30 @@ bool LngSet = false;
 int32_t LatitudeE7 = 0;
 int32_t LongitudeE7 = 0;
 
+static bool fallback_set = false;
+static int32_t fallback_lat_e7;
+static int32_t fallback_lon_e7;
+
+void Position_SetFallback(int32_t lat_e7, int32_t lon_e7){
+	fallback_lat_e7 = lat_e7;
+	fallback_lon_e7 = lon_e7;
+	fallback_set = true;
+}
+
+bool Position_Get(int32_t *lat_e7, int32_t *lon_e7){
+	if (LatSet && LngSet){
+		*lat_e7 = LatitudeE7;
+		*lon_e7 = LongitudeE7;
+		return true;
+	}
+	if (fallback_set){
+		*lat_e7 = fallback_lat_e7;
+		*lon_e7 = fallback_lon_e7;
+		return true;
+	}
+	return false;
+}
+
 static bool ParseDateTime(const char *str, DateTime_t *dt);
 static void HandleGNSS(const char *data, uint16_t length, uint32_t tick);
 static void HandleNetworkTime(const char *data, uint16_t length, uint32_t tick);

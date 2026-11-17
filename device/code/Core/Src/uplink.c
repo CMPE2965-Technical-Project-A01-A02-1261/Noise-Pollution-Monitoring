@@ -154,9 +154,7 @@ void Uplink_AddReading(const Sound_Reading *reading)
 	r->tick = reading->tick;
 	r->db_x10 = (int16_t)(db * 10.0f + 0.5f);
 	r->flags = reading->clipped ? READING_CLIPPED : 0u;
-	if (LatSet && LngSet) {
-		r->lat_e7 = LatitudeE7;
-		r->lon_e7 = LongitudeE7;
+	if (Position_Get(&r->lat_e7, &r->lon_e7)) {
 		r->flags |= READING_HAS_POS;
 	}
 	readings_count++;

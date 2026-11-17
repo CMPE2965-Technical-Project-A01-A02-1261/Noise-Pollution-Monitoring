@@ -42,6 +42,14 @@ extern bool LngSet;
 extern int32_t LatitudeE7;
 extern int32_t LongitudeE7;
 
+/* Fixed position used only until a real one (app or GNSS) arrives, e.g. the
+ * static test position. It does not set LatSet/LngSet, so the device still
+ * sends "REQUEST POS". */
+void Position_SetFallback(int32_t lat_e7, int32_t lon_e7);
+/* The current position: the app/GNSS one if both coordinates arrived,
+ * otherwise the fallback. Returns false if there is neither. */
+bool Position_Get(int32_t *lat_e7, int32_t *lon_e7);
+
 bool SendBLE(const uint8_t *msg, uint8_t msg_length);
 bool SendATCommand(const char * command);
 bool RequestGNSS(uint16_t timeout_s);
