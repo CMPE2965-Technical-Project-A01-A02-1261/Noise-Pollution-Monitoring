@@ -6,3 +6,5 @@ expo-env.d.ts
 # @end expo-cli
 
 node_modules/
+# Expo local dev state (logs, caches, device list)
+.expo/
