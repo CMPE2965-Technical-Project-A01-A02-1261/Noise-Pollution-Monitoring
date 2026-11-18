@@ -2,6 +2,7 @@
 #include "battery.h"
 #include "clock.h"
 #include "sound.h"
+#include "status.h"
 #include "uplink.h"
 
 #include <math.h>
@@ -84,6 +85,12 @@ void HandleAPI(const API_Status *status){
                status->data_length > 0) {
       printf("API Modem Status: status=0x%02X\r\n",
              (uint8_t)status->data[0]);
+      //0x32 = BLE connect, 0x33 = BLE disconnect, for the Bluetooth LED
+      if ((uint8_t)status->data[0] == 0x32) {
+        Status_SetBluetoothConnected(true);
+      } else if ((uint8_t)status->data[0] == 0x33) {
+        Status_SetBluetoothConnected(false);
+      }
     }
     else if (status->frame_type == 0xAD) {
       ReadBluetooth((const uint8_t *)status->data, status->data_length, status->tick);
@@ -207,6 +214,9 @@ void ReadBluetooth(const uint8_t *data, uint16_t length, uint32_t tick){
 	if (data[0] != 1){
 		return; //not from bluetooth on xbee
 	}
+	//a message from the app means it is connected, even if the XBee's
+	//BLE connect status was missed
+	Status_SetBluetoothConnected(true);
 	//extract msg from rest of data array into a null terminated buffer
 	char msg[64];
 	length--;

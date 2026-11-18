@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/sound.c
     Core/Src/clock.c
     Core/Src/uplink.c
+    Core/Src/status.c
     Core/Src/battery.cpp
     Core/Arduino/Wire.cpp
     SparkFun_BQ27441_Arduino_Library-master/src/SparkFunBQ27441.cpp

@@ -26,6 +26,7 @@
 #include "uplink.h"
 #include "clock.h"
 #include "message.h"
+#include "status.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +57,8 @@
  * which filters out the falling edges from bounce on release. */
 #define BUTTON_DEBOUNCE_MS 250u
 #define BUTTON_CONFIRM_MS 20u
+/* The status button (PC11, low while pressed) shows the status LEDs for
+ * STATUS_SHOW_MS. Debounced the same way as B1. */
 
 /* TESTING: skip GNSS and use a fixed position until the app sends one, so
  * uploads can be tested without a fix. Set to 0 to restore GNSS. */
@@ -90,6 +93,9 @@ volatile API_Status api_status;
 /* Set by the B1 interrupt, handled by the main loop. */
 static volatile bool button_pressed;
 static volatile uint32_t button_press_tick;
+/* Set by the status button interrupt, handled by the main loop. */
+static volatile bool status_button_pressed;
+static volatile uint32_t status_button_tick;
 Battery_Status battery_status;
 /* Latest one second sound level from the microphone. */
 Sound_Reading sound_level;
@@ -177,6 +183,8 @@ int main(void)
    * boot. Once started, a failed start is retried by Sound_Read. */
 
   uint32_t last_battery_poll = HAL_GetTick();
+  /* Status LEDs come on for STATUS_SHOW_MS at power up. */
+  Status_Show();
 #if TEST_STATIC_POSITION
   /* Only a fallback: the app (or GNSS) position replaces it once received. */
   Position_SetFallback(TEST_LATITUDE_E7, TEST_LONGITUDE_E7);
@@ -209,6 +217,18 @@ int main(void)
         }
       }
     }
+
+    /* Status button: show the status LEDs, restarting the timer if they are
+     * already on. */
+    if (status_button_pressed &&
+        HAL_GetTick() - status_button_tick >= BUTTON_CONFIRM_MS) {
+      status_button_pressed = false;
+      if (HAL_GPIO_ReadPin(STATUS_BTN_GPIO_Port, STATUS_BTN_Pin) ==
+          GPIO_PIN_RESET) {
+        Status_Show();
+      }
+    }
+    Status_Process();
 
     Sound_Reading reading;
     while (Sound_Read(&reading)) {
@@ -472,11 +492,25 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin : B1_Pin */
-  GPIO_InitStruct.Pin = B1_Pin;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, LED_BAT_25_Pin|LED_BAT_50_Pin|LED_BAT_75_Pin|
+                          LED_BAT_100_Pin|LED_BT_Pin|LED_GNSS_R_Pin|
+                          LED_GNSS_G_Pin|LED_CELL_R_Pin|LED_CELL_G_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : B1_Pin STATUS_BTN_Pin */
+  GPIO_InitStruct.Pin = B1_Pin|STATUS_BTN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : LED_BAT_25_Pin LED_BAT_50_Pin LED_BAT_75_Pin LED_BAT_100_Pin LED_BT_Pin LED_GNSS_R_Pin LED_GNSS_G_Pin LED_CELL_R_Pin LED_CELL_G_Pin */
+  GPIO_InitStruct.Pin = LED_BAT_25_Pin|LED_BAT_50_Pin|LED_BAT_75_Pin|
+                          LED_BAT_100_Pin|LED_BT_Pin|LED_GNSS_R_Pin|
+                          LED_GNSS_G_Pin|LED_CELL_R_Pin|LED_CELL_G_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB6 */
   GPIO_InitStruct.Pin = GPIO_PIN_6;
@@ -521,18 +555,25 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
   }
 }
 
-/* B1 pressed (PC13 falls). Only flags it; the main loop starts or stops
- * recording, since that calls HAL functions that wait on SysTick. */
+/* B1 (PC13) or the status button (PC11) pressed. Only flags it; the main
+ * loop does the work (starting/stopping recording, showing the status LEDs),
+ * since that calls HAL functions that wait on SysTick. */
 void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin) {
-	static uint32_t last_press;
-	if (GPIO_Pin != B1_Pin) {
-		return;
-	}
+	static uint32_t last_b1_press;
+	static uint32_t last_status_press;
 	uint32_t now = HAL_GetTick();
-	if (now - last_press >= BUTTON_DEBOUNCE_MS) {
-		last_press = now;
-		button_press_tick = now;
-		button_pressed = true;
+	if (GPIO_Pin == B1_Pin) {
+		if (now - last_b1_press >= BUTTON_DEBOUNCE_MS) {
+			last_b1_press = now;
+			button_press_tick = now;
+			button_pressed = true;
+		}
+	} else if (GPIO_Pin == STATUS_BTN_Pin) {
+		if (now - last_status_press >= BUTTON_DEBOUNCE_MS) {
+			last_status_press = now;
+			status_button_tick = now;
+			status_button_pressed = true;
+		}
 	}
 }
 
