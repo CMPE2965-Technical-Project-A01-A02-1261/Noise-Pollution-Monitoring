@@ -75,8 +75,7 @@ function stat(label, value, unit, tone, note) {
     note ? h('div', { class: 'stat-note' }, note) : null);
 }
 
-function buildChart(readings) {
-  const W = 800, H = 300;                       // size of the drawing
+function buildChart(readings, W = 800, H = 300) {   // W and H: size of the drawing
   const left = 44, right = 12, top = 12, bottom = 28;
   const plotW = W - left - right;
   const plotH = H - top - bottom;
@@ -461,88 +460,225 @@ function deleteControl(s) {
 }
 
 // ---------- pages ----------
+// One full-screen dashboard. Everything shows at once for the selected session.
+// Click a row in the session list or a pin on the map to change the selected session.
 
-async function showList() {
-  const sessions = await loadSessions();
-  document.title = 'Noise Monitor';
+let page;
+let shellReady = false;
+let routeToken = 0;
+let sessionsCache = [];
+let selectedId = null;
+let chartTab = 'chart';
+let mapMode = 'all';
 
-  const header = h('tr', {},
-    h('th', {}, 'Session'), h('th', {}, 'Duration'),
-    h('th', {}, 'Location'), h('th', {}, 'LAeq (dB(A))'), h('th', {}, 'LAmax (dB(A))'),
-    h('th', {}, 'Notes'));
-
-  const rows = sessions.map((s) =>
-    h('tr', {},
-      h('td', { class: 'session-cell' },
-        h('a', { href: `#/session/${s.id}`, class: 'session-id' }, `#${s.id}`),
-        h('span', { class: 'session-when' },
-          `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}`)),
-      h('td', {}, formatDuration(s.duration_s)),
-        h('td', { class: 'location-cell' },
-        h('span', { class: 'loc-main' }, formatLocation(s.location)),
-        s.location ? h('span', { class: 'loc-sub', 'data-lat': s.location.lat, 'data-lon': s.location.lon }) : null),
-      h('td', {}, h('span', { class: 'num' }, s.summary.leq.toFixed(1)), meter(s.summary.leq, s.summary.lmax)),
-      h('td', {}, h('span', { class: 'num' }, s.summary.lmax.toFixed(1))),
-      h('td', {}, notes(s))));
-
-  show(sessionsMap(sessions),
-    h('h2', {}, 'Recording sessions'),
-    h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, header), h('tbody', {}, rows))),
-    h('p', { class: 'meta' }, 'The bar under each LAeq shows the average level on a 30 to 110 dB(A) scale. The tick marks LAmax.'));
-  fillPlaceNames();
+function ensureShell() {
+  if (shellReady) return;
+  page = h('div', { class: 'page' });
+  show(page);
+  shellReady = true;
 }
 
-const RAW_ROWS_SHOWN = 30;
+function formatLong(seconds) {
+  if (seconds < 60) return `${seconds} s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  return `${Math.floor(seconds / 3600)} h ${Math.floor((seconds % 3600) / 60)} min`;
+}
 
-async function showSession(id) {
-  const s = await loadSession(id);
+function makeTabs(list, current, onPick) {
+  return h('div', { class: 'tabs', role: 'tablist' }, list.map(([key, label]) => {
+    const b = h('button', { type: 'button', class: key === current ? 'tab active' : 'tab', role: 'tab', 'aria-selected': String(key === current) }, label);
+    b.addEventListener('click', () => onPick(key));
+    return b;
+  }));
+}
+
+// Tabs that swap the body of a panel without redrawing the rest of the page.
+function tabbed(list, initial, render) {
+  let current = initial;
+  const tabsBox = h('div', { class: 'panel-tabs' });
+  const body = h('div', { class: 'panel-body' });
+  const draw = () => {
+    tabsBox.replaceChildren(makeTabs(list, current, (key) => { current = key; draw(); }));
+    body.replaceChildren(...[].concat(render(current)));
+  };
+  draw();
+  return { tabs: tabsBox, body };
+}
+
+function panel(cls, head, body) {
+  return h('section', { class: `panel ${cls}` }, head, body);
+}
+
+function kpi(label, value, unit, tone, note) {
+  return h('div', tone ? { class: 'kpi kpi-tone', style: `--tone:${tone}` } : { class: 'kpi' },
+    h('div', { class: 'stat-label' }, label),
+    h('div', { class: 'kpi-value' }, value, unit ? h('span', { class: 'unit' }, ` ${unit}`) : null),
+    note ? h('div', { class: 'kpi-note' }, note) : null);
+}
+
+// Share of readings in each level band, drawn as a ring.
+function levelDonut(readings, leq) {
+  const counts = [0, 0, 0];
+  for (const r of readings) counts[r.db < 55 ? 0 : r.db < 70 ? 1 : 2] += 1;
+  const n = readings.length || 1;
+  const R = 62, C = 2 * Math.PI * R;
+  const colors = [levelColor(0), levelColor(60), levelColor(80)];
+  const names = ['Quiet', 'Moderate', 'Loud'];
+
+  const ring = svg('svg', { viewBox: '0 0 160 160', class: 'donut', role: 'img', 'aria-label': 'Share of readings at each level' });
+  ring.append(svg('circle', { cx: 80, cy: 80, r: R, fill: 'none', stroke: '#dce3e8', 'stroke-width': 18 }));
+  let offset = 0;
+  counts.forEach((c, i) => {
+    if (!c) return;
+    const len = (c / n) * C;
+    ring.append(svg('circle', {
+      cx: 80, cy: 80, r: R, fill: 'none', stroke: colors[i], 'stroke-width': 18,
+      'stroke-dasharray': `${len} ${C - len}`, 'stroke-dashoffset': -offset, transform: 'rotate(-90 80 80)',
+    }));
+    offset += len;
+  });
+  const big = svg('text', { x: 80, y: 84, 'text-anchor': 'middle', class: 'donut-value' });
+  big.textContent = leq.toFixed(1);
+  const small = svg('text', { x: 80, y: 102, 'text-anchor': 'middle', class: 'donut-unit' });
+  small.textContent = 'LAeq dB(A)';
+  ring.append(big, small);
+
+  const legend = h('ul', { class: 'legend' }, names.map((name, i) =>
+    h('li', {},
+      h('span', { class: 'swatch', style: `background:${colors[i]}` }), name,
+      h('span', { class: 'legend-pct' }, `${Math.round((counts[i] / n) * 100)}%`))));
+  return h('div', { class: 'donut-wrap' }, ring, legend);
+}
+
+// ---------- one session: readings tables ----------
+
+const RAW_PAGE = 50;
+
+function rawTable(s) {
+  let pageNo = 0;
+  const pages = Math.max(1, Math.ceil(s.readings.length / RAW_PAGE));
+  const box = h('div', {});
+  const draw = () => {
+    const from = pageNo * RAW_PAGE;
+    const to = Math.min(from + RAW_PAGE, s.readings.length);
+    const rows = s.readings.slice(from, to).map((r) =>
+      h('tr', {},
+        h('td', {}, new Date(r.ts).toLocaleTimeString()),
+        h('td', {}, r.db.toFixed(1)),
+        h('td', {}, r.clipped ? 'yes' : '')));
+    const prev = h('button', { type: 'button', class: 'button secondary' }, 'Previous');
+    const next = h('button', { type: 'button', class: 'button secondary' }, 'Next');
+    prev.disabled = pageNo === 0;
+    next.disabled = pageNo >= pages - 1;
+    prev.addEventListener('click', () => { pageNo -= 1; draw(); });
+    next.addEventListener('click', () => { pageNo += 1; draw(); });
+    box.replaceChildren(
+      h('div', { class: 'table-wrap' }, h('table', {},
+        h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB(A)'), h('th', {}, 'Mic maxed out'))),
+        h('tbody', {}, rows))),
+      h('div', { class: 'pager' },
+        h('span', { class: 'meta' }, s.readings.length ? `Readings ${from + 1} to ${to} of ${s.readings.length}` : 'No readings'),
+        prev, next));
+  };
+  draw();
+  return box;
+}
+
+function statStrip(sum) {
+  const item = (label, v) => h('div', { class: 'strip-item' }, h('span', { class: 'stat-label' }, label), h('span', { class: 'strip-value' }, v.toFixed(1)));
+  return h('div', { class: 'strip' },
+    item('LAmax', sum.lmax), item('LAmin', sum.lmin), item('LA10', sum.l10), item('LA50', sum.l50), item('LA90', sum.l90),
+    h('span', { class: 'unit' }, 'dB(A)'));
+}
+
+// ---------- the dashboard ----------
+
+function renderDashboard(s) {
+  const sessions = sessionsCache;
   const sum = s.summary;
-  document.title = `Session ${s.id} - Noise Monitor`;
+  const total = sessions.reduce((acc, x) => acc + x.duration_s, 0);
+  const loudest = Math.max(...sessions.map((x) => x.summary.lmax));
 
-  const rawRows = s.readings.slice(0, RAW_ROWS_SHOWN).map((r) =>
-    h('tr', {},
-      h('td', {}, new Date(r.ts).toLocaleTimeString()),
-      h('td', {}, r.db.toFixed(1)),
-      h('td', {}, r.clipped ? 'yes' : '')));
+  // Row 1: four numbers
+  const kpis = h('div', { class: 'kpis' },
+    kpi('Sessions', String(sessions.length)),
+    kpi('Recorded', formatLong(total)),
+    kpi('Loudest reading', loudest.toFixed(1), 'dB(A)', levelColor(loudest)),
+    kpi(`Session ${s.id} LAeq`, sum.leq.toFixed(1), 'dB(A)', levelColor(sum.leq), levelLabel(sum.leq)));
 
-  // ---------- download CSV button ----------
-  const csvButton = h('button', { type: 'button', class: 'button' }, 'Download raw data (CSV)');
-  csvButton.addEventListener('click', () => downloadCsv(s));      
-  
-  show(
-    h('p', {}, h('a', { href: '#/' }, '← All sessions')),
-    h('h1', {}, `Session ${s.id}`),
+  // Row 2 left: the chart and the readings
+  const chartTabs = tabbed([['chart', 'Level'], ['minute', 'Per minute'], ['raw', 'Raw readings']], chartTab, (key) => {
+    chartTab = key;
+    if (key === 'minute') return minuteTable(s.readings);
+    if (key === 'raw') return rawTable(s);
+    // Draw the chart to fit whatever room the panel has.
+    const fill = h('div', { class: 'chart-fill' });
+    let lastSize = '';
+    new ResizeObserver(() => {
+      const w = Math.floor(fill.clientWidth), ht = Math.floor(fill.clientHeight) - 34;   // 34: room for the readout line
+      if (w < 240 || ht < 120 || `${w}x${ht}` === lastSize) return;
+      lastSize = `${w}x${ht}`;
+      fill.replaceChildren(buildChart(s.readings, w, ht));
+    }).observe(fill);
+    return h('div', { class: 'chart-tab' }, statStrip(sum), fill);
+  });
+  const chartPanel = panel('panel-chart',
+    h('div', { class: 'panel-head' },
+      h('div', { class: 'panel-title' },
+        h('h2', {}, `Session ${s.id}`),
         h('p', { class: 'meta' },
-      `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { timeZoneName: 'short' })} · ${formatDuration(s.duration_s)} · `,
-      h('span', { id: 'session-where', 'data-session': s.id }, formatLocation(s.location))),
-    warnings(s).map((w) => h('div', { class: 'warning' }, w)),
+          `${s.device_id} · ${new Date(s.started_at).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })} · ${formatDuration(s.duration_s)} · `,
+          h('span', { id: 'session-where', 'data-session': s.id }, formatLocation(s.location)))),
+      chartTabs.tabs),
+    chartTabs.body);
 
-    h('div', { class: 'stats' },
-      stat('LAeq', sum.leq.toFixed(1), 'dB(A)', levelColor(sum.leq), levelLabel(sum.leq)), stat('LAmax', sum.lmax.toFixed(1), 'dB(A)'),
-      stat('LAmin', sum.lmin.toFixed(1), 'dB(A)'), stat('LA10', sum.l10.toFixed(1), 'dB(A)'),
-      stat('LA50', sum.l50.toFixed(1), 'dB(A)'), stat('LA90', sum.l90.toFixed(1), 'dB(A)'),
-      stat('Readings', String(s.readings.length))),
-    h('p', { class: 'meta' },
-      'LAeq is the A-weighted average level (energy basis). LA10, LA50 and LA90 are the levels exceeded 10%, 50% and 90% of the time.'),
+  // Row 2 right: time at each level, notes, and actions
+  const csvButton = h('button', { type: 'button', class: 'button' }, 'Download CSV');
+  csvButton.addEventListener('click', () => downloadCsv(s));
+  const sharePanel = panel('panel-share',
+    h('div', { class: 'panel-head' }, h('h2', {}, 'Time at each level')),
+    h('div', { class: 'panel-body' },
+      levelDonut(s.readings, sum.leq),
+      warnings(s).map((w) => h('div', { class: 'warning' }, w)),
+      h('div', { class: 'actions' }, csvButton),
+      deleteControl(s)));
 
-    h('h2', {}, 'Location of readings'),
-    buildMap(s),
-    
-    h('h2', {}, 'Sound level over time (dB(A))'),
-    buildChart(s.readings),
+  // Row 3 left: sessions
+  const rows = sessions.map((x) => {
+    const tr = h('tr', { class: x.id === s.id ? 'selected' : '' },
+      h('td', { class: 'session-cell' },
+        h('a', { href: `#/session/${x.id}`, class: 'session-id' }, `#${x.id}`),
+        h('span', { class: 'session-when' },
+          new Date(x.started_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ` · ${formatDuration(x.duration_s)}`),
+        notes(x).length ? h('span', { class: 'row-notes' }, notes(x)) : null),
+      h('td', { class: 'location-cell' },
+        h('span', { class: 'loc-main' }, formatLocation(x.location)),
+        x.location ? h('span', { class: 'loc-sub', 'data-lat': x.location.lat, 'data-lon': x.location.lon }) : null),
+      h('td', {}, h('span', { class: 'num' }, x.summary.leq.toFixed(1)), meter(x.summary.leq, x.summary.lmax)));
+    tr.addEventListener('click', (e) => { if (!e.target.closest('a')) location.hash = `#/session/${x.id}`; });
+    return tr;
+  });
+  const tablePanel = panel('panel-table',
+    h('div', { class: 'panel-head' }, h('h2', {}, 'Sessions'),
+      h('span', { class: 'meta' }, 'Bar: LAeq. Tick: LAmax.')),
+    h('div', { class: 'panel-body' },
+      h('table', {},
+        h('thead', {}, h('tr', {}, h('th', {}, 'Session'), h('th', {}, 'Location'), h('th', {}, 'LAeq (dB(A))'))),
+        h('tbody', {}, rows))));
 
-    h('h2', {}, 'Interpreted data (per minute)'),
-    minuteTable(s.readings),
+  // Row 3 right: map
+  const mapTabs = tabbed([['all', 'All sessions'], ['one', `Session ${s.id}`]], mapMode, (key) => {
+    mapMode = key;
+    return key === 'one' ? buildMap(s) : sessionsMap(sessions);
+  });
+  const mapPanel = panel('panel-map',
+    h('div', { class: 'panel-head' }, h('h2', {}, 'Map'), mapTabs.tabs),
+    mapTabs.body);
+  mapPanel.classList.add('panel-map');
 
-    h('h2', {}, 'Raw data'),
-    h('div', { class: 'toolbar' }, csvButton),
-    h('p', { class: 'meta' }, `First ${RAW_ROWS_SHOWN} of ${s.readings.length} readings.`),
-    h('div', { class: 'table-wrap' }, h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'Time'), h('th', {}, 'dB(A)'), h('th', {}, 'Mic maxed out'))),
-      h('tbody', {}, rawRows))),
-
-    deleteControl(s)
-    );
+  page.replaceChildren(h('div', { class: 'dash' }, kpis, chartPanel, sharePanel, tablePanel, mapPanel));
+  const selectedRow = page.querySelector('tr.selected');
+  if (selectedRow) selectedRow.scrollIntoView({ block: 'nearest' });
 
   // Add the place name to the header line once it is known.
   if (s.location) {
@@ -555,15 +691,34 @@ async function showSession(id) {
   }
 }
 
-// ---------- routing: #/ is the list, #/session/3 is session 3 ----------
+// ---------- routing: #/ shows the newest session, #/session/3 shows session 3 ----------
 
 async function route() {
+  const token = ++routeToken;
   try {
     const m = location.hash.match(/^#\/session\/(\d+)$/);
-    if (m) await showSession(Number(m[1]));
-    else await showList();
+    ensureShell();
+    sessionsCache = await loadSessions();
+    if (token !== routeToken) return;
+
+    if (sessionsCache.length === 0) {
+      page.replaceChildren(h('div', { class: 'empty-state' },
+        h('h1', {}, 'No sessions yet'),
+        h('p', { class: 'meta' }, 'Start a recording on the device. It shows up here once the readings arrive.')));
+      return;
+    }
+
+    const id = m ? Number(m[1]) : sessionsCache[0].id;
+    document.title = `Session ${id} - Noise Monitor`;
+    const s = await loadSession(id);
+    if (token !== routeToken) return;
+    if (id !== selectedId) { chartTab = 'chart'; }
+    selectedId = id;
+    renderDashboard(s);
+    fillPlaceNames();
   } catch (err) {
-    show(h('p', { class: 'error' }, `Could not load data: ${err.message}`));
+    shellReady = false;
+    show(h('p', { class: 'error error-box' }, `Could not load data: ${err.message}`));
   }
 }
 
