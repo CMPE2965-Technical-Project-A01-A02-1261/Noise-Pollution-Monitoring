@@ -8,7 +8,7 @@
       "internal_id": "",
       "mfg": "",
       "mpn": "",
-      "sch_revision": ""
+      "sch_revision": "3"
     },
     "layer_pairs": [],
     "layer_presets": [],
@@ -423,11 +423,22 @@
     "reuse_designators": true,
     "subpart_first_id": 65,
     "subpart_id_separator": 0,
-    "top_level_sheets": [],
+    "top_level_sheets": [
+      {
+        "filename": "Noise Pollution Monitor.kicad_sch",
+        "name": "Noise Pollution Monitor",
+        "uuid": "51515549-c073-4ebf-8cb6-2f045c4405a3"
+      }
+    ],
     "used_designators": "",
     "variants": []
   },
-  "sheets": [],
+  "sheets": [
+    [
+      "51515549-c073-4ebf-8cb6-2f045c4405a3",
+      "Noise Pollution Monitor"
+    ]
+  ],
   "text_variables": {},
   "tuning_profiles": {
     "meta": {
