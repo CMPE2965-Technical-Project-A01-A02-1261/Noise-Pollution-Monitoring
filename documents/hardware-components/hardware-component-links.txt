@@ -1,0 +1,32 @@
+Digi XBee 3 Global LTE-M/NB-IoT Development Kit
+https://www.digi.com/products/models/xk3-c-gm2-ut-w
+
+
+STM32 Nucleo-64 development board
+https://www.st.com/en/evaluation-tools/nucleo-g0b1re.html
+
+
+3.7V Lipo Battery 3000mAh 
+https://www.amazon.ca/dp/B0CNLNKSKK?ref=ppx_yo2ov_dt_b_fed_asin_title&th=1
+
+
+DMM-4026-B-I2S-EB-R
+https://www.digikey.com/en/products/detail/pui-audio-inc/DMM-4026-B-I2S-EB-R/12315316
+
+
+SparkFun Battery Babysitter - LiPo Battery Manager
+https://www.sparkfun.com/sparkfun-battery-babysitter-lipo-battery-manager.html
+
+
+SparkFun Buck-Boost Converter
+https://www.sparkfun.com/sparkfun-buck-boost-converter.html
+
+
+
+
+
+
+
+
+
+
