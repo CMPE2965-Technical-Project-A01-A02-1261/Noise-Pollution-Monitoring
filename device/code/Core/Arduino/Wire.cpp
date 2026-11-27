@@ -9,11 +9,24 @@ extern "C" I2C_HandleTypeDef hi2c1;
 
 TwoWire Wire(&hi2c1);
 
+/* After a HAL timeout the peripheral can be left mid-transfer, driving SCL
+ * and SDA low with BUSY set; the handle is marked ready, but every later
+ * transfer then times out too. Clearing PE resets the I2C state machine and
+ * releases the lines (RM0444: PE must stay low for 3 APB cycles; the read
+ * back covers that). */
+static void ResetPeripheral(I2C_HandleTypeDef *hi2c) {
+  __HAL_I2C_DISABLE(hi2c);
+  while (hi2c->Instance->CR1 & I2C_CR1_PE) {
+  }
+  __HAL_I2C_ENABLE(hi2c);
+}
+
 TwoWire::TwoWire(I2C_HandleTypeDef *hi2c)
     : _hi2c(hi2c), _txAddress(0), _txLength(0), _txOverflow(false),
       _rxLength(0), _rxIndex(0) {}
 
 void TwoWire::begin(void) {
+  ResetPeripheral(_hi2c);
   _txLength = 0;
   _txOverflow = false;
   _rxLength = 0;
@@ -46,6 +59,7 @@ uint8_t TwoWire::endTransmission(bool sendStop) {
   if (status == HAL_OK) {
     return 0;
   }
+  ResetPeripheral(_hi2c);
   if (status == HAL_TIMEOUT) {
     return 5;
   }
@@ -72,6 +86,8 @@ size_t TwoWire::requestFrom(uint16_t address, size_t quantity, bool sendStop) {
   if (HAL_I2C_Master_Receive(_hi2c, (uint16_t)(address << 1), _rxBuffer,
                              (uint16_t)quantity, WIRE_TIMEOUT_MS) == HAL_OK) {
     _rxLength = quantity;
+  } else {
+    ResetPeripheral(_hi2c);
   }
   return _rxLength;
 }
