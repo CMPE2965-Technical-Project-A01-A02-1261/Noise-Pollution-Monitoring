@@ -14,12 +14,14 @@ started and stopped with the button on the device)
 
 "REQUEST TIME" device asks app for current time
 
-"DT YYYY-MM-DDTHH:MM:SS" current date and time in UTC (not local time); the device uses it
-to timestamp readings sent to the server until it has a GNSS fix
+"DT YYYY-MM-DDTHH:MM:SS" app replies to REQUEST TIME with the phone's current date and time in
+UTC (not local time); the device uses it to timestamp readings sent to the server until it has a
+GNSS fix
 
 "REQUEST POS" device asks app for position
 
-"LAT ##.#####" latitude and longitude sent to device, disregarded if device has GNSS position
+"LAT ##.#####" latitude and longitude sent to device in reply to REQUEST POS (phone's location,
+5 decimal places, LAT then LNG), disregarded if device has GNSS position
 "LNG ##.#####"
 
 ### Bluetooth signal strength

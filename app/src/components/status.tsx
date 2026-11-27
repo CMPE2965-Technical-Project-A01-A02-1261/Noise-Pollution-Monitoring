@@ -1,50 +1,128 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+
+export type StatusTone = 'good' | 'warning' | 'bad' | 'neutral';
 
 interface StatusProps {
-    title: 'BATT' | 'CELL' | 'GNSS' | 'BLUE' | 'TIME';
-    data: string;
+    label: string;
+    /** Main value. Omit while waiting for the device to report it. */
+    value?: string;
+    detail?: string;
+    tone?: StatusTone;
+    /** Optional meter shown under the value. */
+    meter?: { kind: 'fill'; fraction: number } | { kind: 'bars'; filled: number; total: number };
 }
-// Define the component and export it
-export default function Status({ title, data }: StatusProps) {
-    const RenderStatus = () => {
-        switch (title) {
-            case 'BATT':
-                return <Text style={styles.text}>Battery: %{data}</Text>;
 
-            case 'CELL':
-                return <Text style={styles.text}>Cellular: {data}</Text>;
+const TONE_COLORS: Record<StatusTone, string> = {
+    good: '#1E9E5A',
+    warning: '#D98E04',
+    bad: '#D64545',
+    neutral: '#208AEF',
+};
 
-            case 'GNSS':
-                return <Text style={styles.text}>GNSS: {data}</Text>;
+export default function Status({ label, value, detail, tone = 'neutral', meter }: StatusProps) {
+    const color = TONE_COLORS[tone];
+    const hasValue = value !== undefined;
 
-            case 'BLUE':
-                return <Text style={styles.text}>Bluetooth: {data}</Text>;
-
-            case 'TIME':
-                return <Text style={styles.text}>Time: {data}</Text>;
-                
-            default:
-                return null;
-        }
-
-    }   
     return (
-        <View style={styles.container}>
-            <RenderStatus />
+        <View
+            accessible
+            accessibilityLabel={`${label}: ${hasValue ? value : 'waiting'}${detail ? `, ${detail}` : ''}`}
+            style={styles.card}
+        >
+            <Text style={styles.label}>{label}</Text>
+            <Text style={[styles.value, !hasValue && styles.placeholder]}>
+                {hasValue ? value : '—'}
+            </Text>
+
+            {hasValue && meter?.kind === 'fill' && (
+                <View style={styles.track}>
+                    <View
+                        style={[
+                            styles.fill,
+                            {
+                                backgroundColor: color,
+                                width: `${Math.round(Math.max(0, Math.min(1, meter.fraction)) * 100)}%`,
+                            },
+                        ]}
+                    />
+                </View>
+            )}
+
+            {hasValue && meter?.kind === 'bars' && (
+                <View style={styles.bars}>
+                    {Array.from({ length: meter.total }, (_, index) => (
+                        <View
+                            key={index}
+                            style={[
+                                styles.bar,
+                                { height: 6 + index * 4 },
+                                index < meter.filled && { backgroundColor: color },
+                            ]}
+                        />
+                    ))}
+                </View>
+            )}
+
+            <Text style={[styles.detail, hasValue && tone !== 'neutral' && { color }]}>
+                {hasValue ? detail ?? ' ' : 'Waiting for device'}
+            </Text>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 10,
+    card: {
+        backgroundColor: '#fff',
+        borderColor: '#e3e6ea',
+        borderRadius: 12,
+        borderWidth: 1,
+        flexBasis: '47%',
+        flexGrow: 1,
+        padding: 14,
     },
-    text: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
+    label: {
+        color: '#666',
+        fontSize: 13,
+        fontWeight: '600',
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    value: {
+        color: '#222',
+        fontSize: 26,
+        fontVariant: ['tabular-nums'],
+        fontWeight: '700',
+        marginTop: 6,
+    },
+    placeholder: {
+        color: '#bbb',
+    },
+    track: {
+        backgroundColor: '#eceff2',
+        borderRadius: 4,
+        height: 8,
+        marginTop: 8,
+        overflow: 'hidden',
+    },
+    fill: {
+        borderRadius: 4,
+        height: '100%',
+    },
+    bars: {
+        alignItems: 'flex-end',
+        flexDirection: 'row',
+        gap: 3,
+        height: 22,
+        marginTop: 8,
+    },
+    bar: {
+        backgroundColor: '#dde1e5',
+        borderRadius: 2,
+        width: 6,
+    },
+    detail: {
+        color: '#888',
+        fontSize: 13,
+        marginTop: 8,
     },
 });

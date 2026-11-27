@@ -181,6 +181,9 @@ interface XBeeSession {
     subscription: BleSubscription;
     reader: FrameReader;
     txCipher: CtrStream;
+    /** Tail of the write queue. Frames are written one at a time so the
+     * encrypted chunks of two messages never interleave. */
+    writeQueue: Promise<void>;
 }
 
 export interface XBeeBluetoothDevice {
@@ -538,7 +541,13 @@ async function connectAndAuthenticate(deviceId: string, password: string): Promi
         const { txCipher, rxCipher } = await authenticate(device, reader, password);
         reader.setDecryptor(rxCipher);
         reader.startStreaming();
-        const session = { device, subscription, reader, txCipher };
+        const session: XBeeSession = {
+            device,
+            subscription,
+            reader,
+            txCipher,
+            writeQueue: Promise.resolve(),
+        };
         activeSession = session;
         return session;
     } catch (error) {
@@ -561,10 +570,31 @@ export async function connectToXBee(deviceId: string, password: string): Promise
     await connectAndAuthenticate(deviceId, password);
 }
 
-export async function sendStatusToXBee(): Promise<void> {
+/**
+ * Reads the signal strength of the active XBee connection, measured by the
+ * phone. The XBee has no way to report its own BLE RSSI, so this is done
+ * app-side. Returns null if nothing is connected or the read fails.
+ */
+export async function readXBeeSignalStrength(): Promise<number | null> {
     const session = activeSession;
     if (!session) {
-        throw new Error('No XBee is connected. Scan for a device and connect before requesting status.');
+        return null;
+    }
+
+    try {
+        const device = await session.device.readRSSI();
+        return typeof device.rssi === 'number' ? device.rssi : null;
+    } catch (error) {
+        console.error('Could not read XBee signal strength:', error);
+        return null;
+    }
+}
+
+/** Sends a text message to the device over the active XBee connection. */
+async function sendMessageToXBee(message: string): Promise<void> {
+    const session = activeSession;
+    if (!session) {
+        throw new Error('No XBee is connected. Scan for a device and connect before sending.');
     }
 
     const connected = await session.device.isConnected();
@@ -584,12 +614,19 @@ export async function sendStatusToXBee(): Promise<void> {
         type: xbeeFrame.FrameType.USER_DATA_RELAY_INPUT,
         id: frameId,
         destination: xbeeFrame.Interface.SERIAL,
-        data: Buffer.from('STATUS', 'utf8'),
+        data: Buffer.from(message, 'utf8'),
     });
 
+    // Encrypt when the write runs, not now, so the CTR keystream stays in the
+    // same order as the bytes on the wire.
+    const write = session.writeQueue.then(() =>
+        writeBytes(session.device, session.txCipher.transform(frame))
+    );
+    session.writeQueue = write.catch(() => undefined);
+
     try {
-        await writeBytes(session.device, session.txCipher.transform(frame));
-        console.log('Sent encrypted XBee BLE API frame:', frameId);
+        await write;
+        console.log(`Sent XBee message "${message}" in frame`, frameId);
     } catch (error) {
         try {
             await disconnectSession(session);
@@ -598,4 +635,27 @@ export async function sendStatusToXBee(): Promise<void> {
         }
         throw error;
     }
+}
+
+export async function sendStatusToXBee(): Promise<void> {
+    await sendMessageToXBee('STATUS');
+}
+
+/** Formats a date as "YYYY-MM-DDTHH:MM:SS" in UTC, the form the device expects. */
+function formatDeviceDateTime(date: Date): string {
+    return date.toISOString().slice(0, 19);
+}
+
+/** Sends the phone's current time (UTC) to the device: "DT YYYY-MM-DDTHH:MM:SS". */
+export async function sendTimeToXBee(): Promise<void> {
+    await sendMessageToXBee(`DT ${formatDeviceDateTime(new Date())}`);
+}
+
+/**
+ * Sends a position to the device as "LAT ##.#####" then "LNG ##.#####".
+ * The device ignores these when it has its own GNSS fix.
+ */
+export async function sendPositionToXBee(latitude: number, longitude: number): Promise<void> {
+    await sendMessageToXBee(`LAT ${latitude.toFixed(5)}`);
+    await sendMessageToXBee(`LNG ${longitude.toFixed(5)}`);
 }
